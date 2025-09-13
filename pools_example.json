@@ -1,0 +1,14 @@
+[
+  {
+    "chain": "ethereum", 
+    "pool": "3pool"
+  },
+  {
+    "chain": "ethereum", 
+    "pool": "steth"
+  },
+  {
+    "chain": "ethereum",
+    "pool": "0xc522A6606BBA746d7960404F22a3DB936B6F4F50"
+  }
+]

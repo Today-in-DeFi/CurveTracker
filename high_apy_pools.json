@@ -1,0 +1,22 @@
+[
+  {
+    "chain": "ethereum",
+    "pool": "0xc522A6606BBA746d7960404F22a3DB936B6F4F50"
+  },
+  {
+    "chain": "ethereum", 
+    "pool": "0x2dded6Da1BF5DBdF597C45fcFaa3194e53EcfeAF"
+  },
+  {
+    "chain": "ethereum",
+    "pool": "0x37636263da44423349788326B860311f5dB0dd20"
+  },
+  {
+    "chain": "ethereum",
+    "pool": "0x463626cF9028d96eAd5084954FF634f813D5fFB9"
+  },
+  {
+    "chain": "ethereum",
+    "pool": "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7"
+  }
+]
