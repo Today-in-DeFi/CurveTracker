@@ -11,6 +11,23 @@ from dataclasses import dataclass
 from tabulate import tabulate
 import argparse
 import sys
+import os
+from datetime import datetime
+from dotenv import load_dotenv
+
+# Google Sheets imports (optional)
+try:
+    import gspread
+    from google.auth import default
+    from google.oauth2 import service_account
+    from gspread_dataframe import set_with_dataframe
+    import pandas as pd
+    SHEETS_AVAILABLE = True
+except ImportError:
+    SHEETS_AVAILABLE = False
+
+# Load environment variables
+load_dotenv()
 
 
 @dataclass
@@ -278,6 +295,200 @@ class CurveTracker:
         return results
 
 
+class GoogleSheetsExporter:
+    """Handle Google Sheets export functionality"""
+    
+    def __init__(self, credentials_file: Optional[str] = None):
+        if not SHEETS_AVAILABLE:
+            raise ImportError("Google Sheets dependencies not available. Install with: pip install gspread gspread-dataframe google-auth")
+        
+        self.credentials_file = credentials_file or os.getenv('GOOGLE_CREDENTIALS_FILE')
+        self.client = None
+    
+    def get_client(self) -> gspread.Client:
+        """Get authenticated Google Sheets client"""
+        if self.client:
+            return self.client
+        
+        try:
+            if self.credentials_file and os.path.exists(self.credentials_file):
+                # Use service account
+                print(f"🔐 Authenticating with service account: {self.credentials_file}")
+                credentials = service_account.Credentials.from_service_account_file(
+                    self.credentials_file,
+                    scopes=['https://spreadsheets.google.com/feeds', 
+                           'https://www.googleapis.com/auth/drive']
+                )
+                self.client = gspread.authorize(credentials)
+                
+                # Show service account email for sharing
+                with open(self.credentials_file, 'r') as f:
+                    creds_info = json.load(f)
+                    email = creds_info.get('client_email', 'Unknown')
+                    print(f"📧 Service account email: {email}")
+                    print("   Share your Google Sheet with this email address")
+            else:
+                # Use default credentials
+                print("🔐 Using default Google credentials")
+                creds, project = default(scopes=['https://spreadsheets.google.com/feeds',
+                                               'https://www.googleapis.com/auth/drive'])
+                self.client = gspread.authorize(creds)
+            
+            return self.client
+            
+        except Exception as e:
+            raise Exception(f"Google Sheets authentication failed: {e}")
+    
+    def get_or_create_worksheet(self, spreadsheet: gspread.Spreadsheet, sheet_name: str) -> gspread.Worksheet:
+        """Get existing worksheet or create new one with headers"""
+        try:
+            worksheet = spreadsheet.worksheet(sheet_name)
+            print(f"✅ Found existing sheet: {sheet_name}")
+            return worksheet
+        except gspread.exceptions.WorksheetNotFound:
+            print(f"📝 Creating new sheet: {sheet_name}")
+            worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=12)
+            
+            # Add headers
+            headers = [
+                'Date', 'Time', 'Pool Name', 'Chain', 'Coins', 'Coin Ratios', 
+                'TVL', 'Base APY (%)', 'CRV Rewards Min (%)', 'CRV Rewards Max (%)', 
+                'Other Rewards', 'Address'
+            ]
+            worksheet.update('A1:L1', [headers])
+            print(f"📋 Added headers to new sheet")
+            
+            return worksheet
+    
+    def format_data_for_sheets(self, pool_data_list: List[PoolData]) -> pd.DataFrame:
+        """Convert pool data to DataFrame format for Google Sheets"""
+        now = datetime.now()
+        date_str = now.strftime('%Y-%m-%d')
+        time_str = now.strftime('%H:%M:%S')
+        
+        rows = []
+        for pool in pool_data_list:
+            # Format CRV rewards
+            if isinstance(pool.crv_rewards_apy, list) and len(pool.crv_rewards_apy) >= 2:
+                crv_min = pool.crv_rewards_apy[0]
+                crv_max = pool.crv_rewards_apy[1]
+            elif isinstance(pool.crv_rewards_apy, list) and len(pool.crv_rewards_apy) == 1:
+                crv_min = crv_max = pool.crv_rewards_apy[0]
+            elif isinstance(pool.crv_rewards_apy, (int, float)):
+                crv_min = crv_max = pool.crv_rewards_apy
+            else:
+                crv_min = crv_max = 0
+            
+            # Format other rewards
+            other_rewards_str = ""
+            if pool.other_rewards:
+                rewards_list = [f"{r['token']}: {r['apy']:.2f}%" for r in pool.other_rewards]
+                other_rewards_str = ", ".join(rewards_list)
+            else:
+                other_rewards_str = "None"
+            
+            # Format coins and ratios
+            coins_str = " / ".join(pool.coins)
+            ratios_str = ", ".join(pool.coin_ratios)
+            
+            rows.append([
+                date_str,
+                time_str,
+                pool.name,
+                pool.chain.title(),
+                coins_str,
+                ratios_str,
+                pool.tvl,
+                pool.base_apy,
+                crv_min,
+                crv_max,
+                other_rewards_str,
+                pool.address
+            ])
+        
+        columns = [
+            'Date', 'Time', 'Pool Name', 'Chain', 'Coins', 'Coin Ratios',
+            'TVL', 'Base APY (%)', 'CRV Rewards Min (%)', 'CRV Rewards Max (%)',
+            'Other Rewards', 'Address'
+        ]
+        
+        return pd.DataFrame(rows, columns=columns)
+    
+    def export_to_sheets(self, pool_data_list: List[PoolData], 
+                        spreadsheet_id: Optional[str] = None, 
+                        spreadsheet_name: Optional[str] = None,
+                        append_data: bool = True) -> None:
+        """Export pool data to Google Sheets"""
+        if not pool_data_list:
+            print("❌ No pool data to export")
+            return
+        
+        client = self.get_client()
+        
+        # Get spreadsheet
+        try:
+            if spreadsheet_id:
+                spreadsheet = client.open_by_key(spreadsheet_id)
+            elif spreadsheet_name:
+                spreadsheet = client.open(spreadsheet_name)
+            else:
+                spreadsheet_name = "Curve Pool Tracker"
+                try:
+                    spreadsheet = client.open(spreadsheet_name)
+                except gspread.exceptions.SpreadsheetNotFound:
+                    print(f"📝 Creating new spreadsheet: {spreadsheet_name}")
+                    spreadsheet = client.create(spreadsheet_name)
+                    print(f"🔗 Spreadsheet URL: https://docs.google.com/spreadsheets/d/{spreadsheet.id}")
+            
+            print(f"📊 Using spreadsheet: {spreadsheet.title}")
+        except Exception as e:
+            print(f"❌ Error accessing spreadsheet: {e}")
+            return
+        
+        # Group pools by chain
+        pools_by_chain = {}
+        for pool in pool_data_list:
+            chain = pool.chain.title()
+            if chain not in pools_by_chain:
+                pools_by_chain[chain] = []
+            pools_by_chain[chain].append(pool)
+        
+        # Export each chain to its own worksheet
+        for chain, pools in pools_by_chain.items():
+            sheet_name = f"{chain} Pools"
+            worksheet = self.get_or_create_worksheet(spreadsheet, sheet_name)
+            
+            # Convert to DataFrame
+            df = self.format_data_for_sheets(pools)
+            
+            if append_data:
+                # Append to existing data
+                try:
+                    existing_data = worksheet.get_all_records()
+                    if existing_data:
+                        existing_df = pd.DataFrame(existing_data)
+                        combined_df = pd.concat([existing_df, df], ignore_index=True)
+                    else:
+                        combined_df = df
+                    
+                    # Clear and update with combined data
+                    worksheet.clear()
+                    set_with_dataframe(worksheet, combined_df, include_index=False)
+                    print(f"📈 Appended {len(df)} rows to {sheet_name} (total: {len(combined_df)})")
+                    
+                except Exception as e:
+                    print(f"⚠️  Error appending data, replacing instead: {e}")
+                    set_with_dataframe(worksheet, df, include_index=False)
+                    print(f"📝 Replaced data in {sheet_name} with {len(df)} rows")
+            else:
+                # Replace all data
+                worksheet.clear()
+                set_with_dataframe(worksheet, df, include_index=False)
+                print(f"📝 Updated {sheet_name} with {len(df)} pools")
+        
+        print(f"✅ Successfully exported {len(pool_data_list)} pools to Google Sheets")
+
+
 def format_currency(amount: float) -> str:
     """Format currency with appropriate suffixes"""
     if amount >= 1_000_000_000:
@@ -360,6 +571,18 @@ def main():
     parser.add_argument('--pools', '-P',
                        help='JSON file with pool list')
     
+    # Google Sheets arguments
+    parser.add_argument('--export-sheets', action='store_true',
+                       help='Export results to Google Sheets')
+    parser.add_argument('--credentials', 
+                       help='Path to Google service account credentials JSON file')
+    parser.add_argument('--sheet-id',
+                       help='Google Sheets spreadsheet ID')
+    parser.add_argument('--sheet-name',
+                       help='Google Sheets spreadsheet name (default: "Curve Pool Tracker")')
+    parser.add_argument('--replace-data', action='store_true',
+                       help='Replace existing data instead of appending (default: append)')
+    
     args = parser.parse_args()
     
     tracker = CurveTracker()
@@ -390,6 +613,34 @@ def main():
         results = tracker.track_pools(popular_pools)
     
     print_results(results)
+    
+    # Export to Google Sheets if requested
+    if args.export_sheets:
+        if not SHEETS_AVAILABLE:
+            print("\n❌ Google Sheets functionality not available.")
+            print("Install dependencies with: pip install gspread gspread-dataframe google-auth")
+            sys.exit(1)
+        
+        if not results:
+            print("\n❌ No data to export to Google Sheets")
+            sys.exit(1)
+        
+        try:
+            print(f"\n📊 Exporting to Google Sheets...")
+            exporter = GoogleSheetsExporter(args.credentials)
+            exporter.export_to_sheets(
+                results,
+                spreadsheet_id=args.sheet_id,
+                spreadsheet_name=args.sheet_name,
+                append_data=not args.replace_data
+            )
+        except Exception as e:
+            print(f"\n❌ Failed to export to Google Sheets: {e}")
+            print("Make sure you have:")
+            print("  1. Valid Google credentials")
+            print("  2. Shared the spreadsheet with your service account email")
+            print("  3. Proper permissions to create/edit spreadsheets")
+            sys.exit(1)
 
 
 if __name__ == "__main__":

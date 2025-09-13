@@ -42,6 +42,21 @@ python3 curve_tracker.py -c ethereum -p "3pool"
 python3 curve_tracker.py --pools pools_example.json
 ```
 
+### Google Sheets Export
+```bash
+# Export to Google Sheets (creates spreadsheet if needed)
+python3 curve_tracker.py --pools pools_example.json --export-sheets
+
+# Export with custom credentials file
+python3 curve_tracker.py -p "0x123..." --export-sheets --credentials "./service-account.json"
+
+# Export to specific spreadsheet
+python3 curve_tracker.py --pools pools.json --export-sheets --sheet-id "1abc123xyz"
+
+# Replace data instead of appending
+python3 curve_tracker.py --pools pools.json --export-sheets --replace-data
+```
+
 ### Example JSON format (pools_example.json):
 ```json
 [
@@ -102,16 +117,45 @@ The script uses official Curve Finance APIs:
 - **Maximum (e.g., 17.93%)**: Maximum 2.5x boost with locked veCRV
 - **Your actual APY** depends on how much CRV you lock for voting
 
+## Google Sheets Setup
+
+### 1. Get Google Service Account Credentials
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing one
+3. Enable the Google Sheets API and Google Drive API
+4. Create a Service Account and download the JSON credentials file
+5. Save it as `Google Credentials.json` in your project folder
+
+### 2. Configure Environment (Optional)
+
+Copy `.env.example` to `.env` and configure:
+```bash
+cp .env.example .env
+# Edit .env with your credentials path
+```
+
+### 3. Share Spreadsheet
+
+Share your Google Spreadsheet with the service account email (found in the credentials JSON file)
+
 ## Command Line Options
 
 ```bash
 python3 curve_tracker.py --help
 ```
 
-Options:
+### Basic Options:
 - `-c, --chain`: Blockchain (default: ethereum)
 - `-p, --pool`: Pool address or name
 - `-P, --pools`: JSON file with pool list
+
+### Google Sheets Options:
+- `--export-sheets`: Enable Google Sheets export
+- `--credentials`: Path to service account JSON file
+- `--sheet-id`: Specific spreadsheet ID to use
+- `--sheet-name`: Spreadsheet name (default: "Curve Pool Tracker")
+- `--replace-data`: Replace data instead of appending
 
 ## Contributing
 
