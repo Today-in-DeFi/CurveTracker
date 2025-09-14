@@ -112,27 +112,31 @@ class StakeDAOAPI:
 
     def get_curve_strategies(self, chain_id: str = "1") -> Dict:
         """Get Curve strategies for a specific chain"""
-        return self._make_request(f"api/strategies/curve/{chain_id}.json")
+        return self._make_request(f"api/strategies/v2/curve/{chain_id}.json")
 
     def find_strategy_by_address(self, pool_address: str, chain_id: str = "1") -> Optional[Dict]:
         """Find StakeDAO strategy by Curve pool address"""
         strategies_data = self.get_curve_strategies(chain_id)
 
-        if not strategies_data or 'deployed' not in strategies_data:
+        # v2 API returns an array directly, not a dict with 'deployed' key
+        if not strategies_data or not isinstance(strategies_data, list):
             return None
 
         pool_address_lower = pool_address.lower()
 
-        # Search through deployed strategies for matching pool address
-        for strategy in strategies_data['deployed']:
+        # Search through strategies for matching pool address
+        for strategy in strategies_data:
             if isinstance(strategy, dict):
                 # Check if strategy has pool address or LP token address
-                strategy_address = strategy.get('lpToken', {}).get('address', '').lower()
-                pool_addr = strategy.get('pool', {}).get('address', '').lower()
+                # Try different possible field names for the token address
+                strategy_address = ''
+                if 'lpToken' in strategy and isinstance(strategy['lpToken'], str):
+                    strategy_address = strategy['lpToken'].lower()
+                elif 'lpToken' in strategy and isinstance(strategy['lpToken'], dict):
+                    strategy_address = strategy['lpToken'].get('address', '').lower()
 
-                if strategy_address == pool_address_lower or pool_addr == pool_address_lower:
+                if strategy_address == pool_address_lower:
                     return strategy
-
         return None
 
 
@@ -325,8 +329,15 @@ class CurveTracker:
         if manual_data:
             return manual_data
 
-        # Map chain name to chain ID
-        chain_id = "1" if chain.lower() == "ethereum" else "1"  # Default to mainnet for now
+        # Map chain name to chain ID for StakeDAO
+        chain_mapping = {
+            'ethereum': '1',
+            'polygon': '137',
+            'arbitrum': '42161',
+            'optimism': '10',
+            'fraxtal': '252'
+        }
+        chain_id = chain_mapping.get(chain.lower(), '1')
 
         if chain_id not in self._stakedao_cache:
             self._stakedao_cache[chain_id] = {}
@@ -415,7 +426,7 @@ class CurveTracker:
         gauge_data = self.get_gauge_rewards(chain, pool_address)
         crv_apy = 0
         other_rewards = []
-        
+
         if gauge_data:
             # Get CRV APY range from gauge data
             # Try gaugeFutureCrvApy first (might be more accurate), fallback to gaugeCrvApy
@@ -424,8 +435,8 @@ class CurveTracker:
                 crv_apy = gauge_crv_apy  # Store as range [min, max]
             elif gauge_crv_apy and len(gauge_crv_apy) == 1:
                 crv_apy = [gauge_crv_apy[0], gauge_crv_apy[0]]  # Same value for min/max
-            
-            # Check for other reward tokens
+
+            # Check for other reward tokens from Curve gauge data
             side_chain_rewards_apy = gauge_data.get('sideChainRewardsApy', 0)
             if side_chain_rewards_apy > 0:
                 other_rewards.append({
@@ -482,11 +493,18 @@ class CurveTracker:
         if self.stakedao_api:
             stakedao_data = self.get_stakedao_data(chain, pool_address)
             if stakedao_data:
-                # Extract APY data (use projected APR which includes CRV rewards)
+                # Extract APY data (v2 API uses current.total instead of projected.total)
                 apr_data = stakedao_data.get('apr', {})
-                projected_apr = apr_data.get('projected', {})
-                if projected_apr and 'total' in projected_apr:
-                    stakedao_apy = projected_apr['total']
+
+                # Try v2 API structure first (current.total)
+                current_apr = apr_data.get('current', {})
+                if current_apr and 'total' in current_apr:
+                    stakedao_apy = current_apr['total']
+                else:
+                    # Fallback to v1 API structure (projected.total)
+                    projected_apr = apr_data.get('projected', {})
+                    if projected_apr and 'total' in projected_apr:
+                        stakedao_apy = projected_apr['total']
 
                 # Extract TVL
                 stakedao_tvl = stakedao_data.get('tvl')
@@ -504,6 +522,22 @@ class CurveTracker:
                                 fee_parts.append(f"{fee_type}: {fee_value:.2f}%")
                 if fee_parts:
                     stakedao_fees = ", ".join(fee_parts)
+
+                # If Curve gauge data doesn't have other rewards, check StakeDAO rewards
+                if not other_rewards and 'rewards' in stakedao_data:
+                    for reward in stakedao_data['rewards']:
+                        if isinstance(reward, dict):
+                            token_info = reward.get('token', {})
+                            if isinstance(token_info, dict):
+                                token_symbol = token_info.get('symbol', 'Unknown')
+                                reward_apr = reward.get('apr', 0)
+
+                                # Skip CRV rewards as they're already shown in CRV Rewards column
+                                if token_symbol.upper() != 'CRV' and reward_apr > 0:
+                                    other_rewards.append({
+                                        'token': token_symbol,
+                                        'apy': reward_apr
+                                    })
 
         # Get Beefy data if enabled
         beefy_apy = None
