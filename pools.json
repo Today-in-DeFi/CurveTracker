@@ -1,0 +1,39 @@
+{
+  "enable_stakedao": false,
+  "enable_beefy": false,
+  "pools": [
+    {
+      "chain": "ethereum",
+      "pool": "0xc522A6606BBA746d7960404F22a3DB936B6F4F50",
+      "comment": "reUSD/scrvUSD",
+      "beefy_available": true,
+      "beefy_vault_id": "curve-reusd-scrvusd"
+    },
+    {
+      "chain": "ethereum",
+      "pool": "0x65b05F6b0472b1f36a2F6d90A14cD21900851609",
+      "comment": "USD3/sUSDS",
+      "beefy_available": false
+    },
+    {
+      "chain": "ethereum",
+      "pool": "0x72310DAAed61321b02B08A547150c07522c6a976",
+      "comment": "USDC/USDf",
+      "beefy_available": true,
+      "beefy_vault_id": "curve-usdc-usdf"
+    },
+    {
+      "chain": "ethereum",
+      "pool": "0xDB74dfDD3BB46bE8Ce6C33dC9D82777BCFc3dEd5",
+      "comment": "weETH/WETH",
+      "beefy_available": false
+    },
+    {
+      "chain": "fraxtal",
+      "pool": "0x15d1ed4418dA1F268bCAd5BA7c8d06BB3c3081eD",
+      "comment": "frxUSD/FXB 2027",
+      "gauge_address": "0x7506A3e213C362b9e21895c2Bd930DF454d46573",
+      "stakedao_vault": "0xE7B60D6ABBa4E0a801ad29c9b824602aB9a0c439"
+    }
+  ]
+}
