@@ -227,9 +227,11 @@ def get_columns_to_display(pool_data_list: List[PoolData]) -> List[str]:
 - **Fallback**: Manual pool data for unsupported pools
 
 ### StakeDAO Integration
-- **Supported Chains**: Ethereum (1), Polygon (137), Arbitrum (42161), Optimism (10)
+- **Supported Chains**: Ethereum (1), Arbitrum (42161), Fraxtal (252), Optimism (10)
+- **API Versioning**: Uses v2 API with v1 fallback compatibility
 - **Chain ID Mapping**: Required for API compatibility
 - **Unsupported Chains**: Integration disabled, shows N/A
+- **⚠️ Important**: See `STAKEDAO_API_NOTES.md` for critical API versioning details
 
 ### Beefy Finance Integration
 - **Multi-Chain**: 20+ chains with automatic detection
@@ -345,3 +347,8 @@ logger.debug(f"Matched {len(matches)} strategies for pool")
 - **Configuration Validation**: Display effective configuration after merging
 
 This architecture ensures the system is modular, extensible, and maintainable while providing reliable data aggregation across multiple DeFi protocols.
+
+## Additional Documentation
+
+- **StakeDAO API Integration**: See `STAKEDAO_API_NOTES.md` for detailed API versioning, chain compatibility, and integration nuances
+- **Troubleshooting**: Refer to API-specific documentation for debugging integration issues
