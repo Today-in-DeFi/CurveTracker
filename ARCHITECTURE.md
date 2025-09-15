@@ -126,6 +126,12 @@ class CurveTracker:
         # Initialize APIs based on flags
         self.stakedao_api = StakeDAOAPI() if enable_stakedao else None
         self.beefy_api = BeefyAPI() if enable_beefy else None
+
+    def get_pool_data(self, chain: str, pool_identifier: str,
+                     stakedao_enabled: bool = None, beefy_enabled: bool = None):
+        # Per-pool integration flags override global settings
+        use_stakedao = stakedao_enabled if stakedao_enabled is not None else self.enable_stakedao
+        use_beefy = beefy_enabled if beefy_enabled is not None else self.enable_beefy
 ```
 
 **Responsibilities:**
@@ -145,17 +151,19 @@ Configuration merged with priority: CLI > JSON > Defaults
 
 ### 2. Pool Data Fetching
 ```
-Input: Pool address/name + Chain
+Input: Pool address/name + Chain + Per-pool flags
      ↓
 1. Fetch core Curve data (required)
      ↓
-2. If StakeDAO enabled: Fetch strategy data (optional)
+2. Check per-pool stakedao_enabled flag:
+   If true AND StakeDAO API available: Fetch strategy data
      ↓
-3. If Beefy enabled: Fetch vault data (optional)
+3. Check per-pool beefy_enabled flag:
+   If true AND Beefy API available: Fetch vault data
      ↓
 4. Merge all data into PoolData object
      ↓
-Output: Complete PoolData with all available integrations
+Output: Complete PoolData with selectively enabled integrations
 ```
 
 ### 3. Address Matching Algorithm
@@ -185,23 +193,25 @@ Each external integration follows the same pattern:
 ### Configuration System
 ```json
 {
-  "enable_stakedao": false,  // Global toggle
-  "enable_beefy": false,     // Global toggle
+  "enable_beefy": true,        // Global Beefy API initialization
   "pools": [
     {
       "chain": "ethereum",
       "pool": "0x...",
-      "beefy_vault_id": "curve-pool-name",  // Pool-specific override
-      "stakedao_vault": "0x...",            // Manual vault specification
+      "stakedao_enabled": true,  // Per-pool StakeDAO toggle
+      "beefy_enabled": true,     // Per-pool Beefy toggle
+      "stakedao_vault": "0x...", // Optional: Manual vault specification
+      "comment": "Pool description"
     }
   ]
 }
 ```
 
 **Configuration Priority:**
-1. CLI flags (highest)
-2. JSON file settings
-3. Default values (lowest)
+1. CLI flags (`--stakedao`, `--beefy`) override all per-pool settings
+2. Per-pool flags (`stakedao_enabled`, `beefy_enabled`)
+3. Global API initialization flags (`enable_beefy`)
+4. Default values (lowest)
 
 ## Display System
 

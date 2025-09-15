@@ -12,7 +12,7 @@ A comprehensive Python tool for tracking Curve Finance pool performance with int
 - 🌐 **Multi-Chain Support**: Ethereum, Fraxtal, Polygon, Arbitrum, Optimism, Base, Fantom and more
 - 📈 **Yield Optimization**: Integrated StakeDAO liquid lockers and Beefy vault strategies
 - 📋 **Smart Export**: Automated Google Sheets integration with organized data and timestamp tracking
-- ⚙️ **Flexible Config**: CLI flags and JSON configuration with modular integration control
+- ⚙️ **Flexible Config**: CLI flags and JSON configuration with per-pool integration control
 - 🔗 **Address Matching**: Intelligent pool matching across platforms using LP token addresses
 - 📊 **Dynamic Columns**: Shows integration data only when available (StakeDAO/Beefy)
 
@@ -76,26 +76,51 @@ python3 curve_tracker.py --pools pools.json --export-sheets --replace-data
 ### Enhanced JSON Configuration Format:
 ```json
 {
-  "enable_stakedao": false,
-  "enable_beefy": false,
+  "enable_beefy": true,
   "pools": [
     {
       "chain": "ethereum",
       "pool": "0xc522A6606BBA746d7960404F22a3DB936B6F4F50",
       "comment": "reUSD/scrvUSD",
-      "beefy_available": true,
-      "beefy_vault_id": "curve-reusd-scrvusd"
+      "stakedao_enabled": true,
+      "beefy_enabled": true
+    },
+    {
+      "chain": "ethereum",
+      "pool": "0x65b05F6b0472b1f36a2F6d90A14cD21900851609",
+      "comment": "USD3/sUSDS",
+      "stakedao_enabled": true,
+      "beefy_enabled": false
     },
     {
       "chain": "fraxtal",
       "pool": "0x15d1ed4418dA1F268bCAd5BA7c8d06BB3c3081eD",
       "comment": "frxUSD/FXB 2027",
       "gauge_address": "0x7506A3e213C362b9e21895c2Bd930DF454d46573",
-      "stakedao_vault": "0xE7B60D6ABBa4E0a801ad29c9b824602aB9a0c439"
+      "stakedao_vault": "0xE7B60D6ABBa4E0a801ad29c9b824602aB9a0c439",
+      "stakedao_enabled": true,
+      "beefy_enabled": false
     }
   ]
 }
 ```
+
+### Configuration Fields
+
+#### Global Settings
+- **`enable_beefy`**: Global Beefy integration toggle (required for any pool to use Beefy)
+
+#### Per-Pool Settings
+- **`stakedao_enabled`**: Enable StakeDAO integration for this specific pool
+- **`beefy_enabled`**: Enable Beefy integration for this specific pool (requires `enable_beefy: true`)
+- **`comment`**: Human-readable pool description
+- **`gauge_address`**: (Optional) Specific gauge address for custom integrations
+- **`stakedao_vault`**: (Optional) Specific StakeDAO vault address
+
+#### Integration Priority
+1. **Per-pool flags** take precedence over global settings
+2. **CLI flags** (`--stakedao`, `--beefy`) override both global and per-pool settings
+3. **API availability** determines final data inclusion
 
 ## Output Examples
 
