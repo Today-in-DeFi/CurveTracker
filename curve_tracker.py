@@ -378,7 +378,7 @@ class CurveTracker:
 
         return self._beefy_cache[chain][pool_address]
     
-    def get_pool_data(self, chain: str, pool_identifier: str) -> Optional[PoolData]:
+    def get_pool_data(self, chain: str, pool_identifier: str, stakedao_enabled: bool = None, beefy_enabled: bool = None) -> Optional[PoolData]:
         """Get comprehensive pool data by address or name"""
         # Check for manual pool data first (for chains not supported by Curve API)
         manual_pool = self._get_manual_pool_data(chain, pool_identifier)
@@ -490,7 +490,7 @@ class CurveTracker:
         stakedao_boost = None
         stakedao_fees = None
 
-        if self.stakedao_api:
+        if self.stakedao_api and (stakedao_enabled if stakedao_enabled is not None else True):
             stakedao_data = self.get_stakedao_data(chain, pool_address)
             if stakedao_data:
                 # Extract APY data (v2 API uses current.total instead of projected.total)
@@ -545,7 +545,7 @@ class CurveTracker:
         beefy_tvl = None
         beefy_vault_id = None
 
-        if self.beefy_api:
+        if self.beefy_api and (beefy_enabled if beefy_enabled is not None else True):
             beefy_data = self.get_beefy_data(chain, pool_address)
             if beefy_data:
                 # Get vault ID for reference
@@ -604,8 +604,10 @@ class CurveTracker:
         for pool_info in pools:
             chain = pool_info['chain']
             pool_id = pool_info['pool']
+            stakedao_enabled = pool_info.get('stakedao_enabled', False)
+            beefy_enabled = pool_info.get('beefy_enabled', False)
 
-            pool_data = self.get_pool_data(chain, pool_id)
+            pool_data = self.get_pool_data(chain, pool_id, stakedao_enabled, beefy_enabled)
             if pool_data:
                 results.append(pool_data)
 
