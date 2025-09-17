@@ -678,13 +678,10 @@ class GoogleSheetsExporter:
         except gspread.exceptions.WorksheetNotFound:
             print(f"📝 Creating new sheet: {sheet_name}")
             worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=12)
-            
-            # Add headers based on unit type
-            if use_eth_units:
-                coin_column = 'ETH Amounts'
-            else:
-                coin_column = 'Coin Ratios'
-                
+
+            # Asset ratio column should always be "Coin Ratios" with percentages
+            coin_column = 'Coin Ratios'
+
             headers = [
                 'Date', 'Time', 'Pool Name', coin_column,
                 'TVL (USD)', 'Base APY (%)', 'CRV Rewards Min (%)', 'CRV Rewards Max (%)',
@@ -693,7 +690,7 @@ class GoogleSheetsExporter:
             ]
             worksheet.update(values=[headers], range_name='A1:O1')
             print(f"📋 Added headers to new sheet")
-            
+
             return worksheet
     
     def format_data_for_sheets(self, pool_data_list: List[PoolData], use_eth_units: bool = False) -> pd.DataFrame:
@@ -701,7 +698,7 @@ class GoogleSheetsExporter:
         now = datetime.now()
         date_str = now.strftime('%Y-%m-%d')
         time_str = now.strftime('%H:%M:%S')
-        
+
         rows = []
         for pool in pool_data_list:
             # Format CRV rewards
@@ -714,7 +711,7 @@ class GoogleSheetsExporter:
                 crv_min = crv_max = pool.crv_rewards_apy
             else:
                 crv_min = crv_max = 0
-            
+
             # Format other rewards
             other_rewards_str = ""
             if pool.other_rewards:
@@ -722,13 +719,10 @@ class GoogleSheetsExporter:
                 other_rewards_str = ", ".join(rewards_list)
             else:
                 other_rewards_str = "None"
-            
-            # Format coin data (ratios for USD pools, ETH amounts for ETH pools)
-            if use_eth_units:
-                coin_data_str = ", ".join(pool.eth_amounts)
-            else:
-                coin_data_str = ", ".join(pool.coin_ratios)
-            
+
+            # Asset ratio column should always use percentages (coin_ratios)
+            coin_data_str = ", ".join(pool.coin_ratios)
+
             rows.append([
                 date_str,
                 time_str,
@@ -746,20 +740,17 @@ class GoogleSheetsExporter:
                 pool.beefy_apy if pool.beefy_apy is not None else "",
                 pool.beefy_tvl if pool.beefy_tvl is not None else ""
             ])
-        
-        # Use different column names based on unit type
-        if use_eth_units:
-            coin_column = 'ETH Amounts'
-        else:
-            coin_column = 'Coin Ratios'
-            
+
+        # Asset ratio column should always be called "Coin Ratios"
+        coin_column = 'Coin Ratios'
+
         columns = [
             'Date', 'Time', 'Pool Name', coin_column,
             'TVL (USD)', 'Base APY (%)', 'CRV Rewards Min (%)', 'CRV Rewards Max (%)',
             'Other Rewards', 'Address', 'StakeDAO APY (%)', 'StakeDAO TVL (USD)',
             'StakeDAO Boost', 'Beefy APY (%)', 'Beefy TVL (USD)'
         ]
-        
+
         return pd.DataFrame(rows, columns=columns)
     
     def export_to_sheets(self, pool_data_list: List[PoolData], 
@@ -815,9 +806,9 @@ class GoogleSheetsExporter:
             # Check if this is an ETH category
             is_eth_category = "ETH" in category
             worksheet = self.get_or_create_worksheet(spreadsheet, category, use_eth_units=is_eth_category)
-            
-            # Convert to DataFrame with appropriate formatting
-            df = self.format_data_for_sheets(pools, use_eth_units=is_eth_category)
+
+            # Convert to DataFrame - asset ratios always use percentages regardless of pool type
+            df = self.format_data_for_sheets(pools, use_eth_units=False)
             
             if append_data:
                 # Append to existing data
