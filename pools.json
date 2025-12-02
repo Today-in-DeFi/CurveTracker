@@ -31,6 +31,20 @@
       "beefy_enabled": false
     },
     {
+      "chain": "ethereum",
+      "pool": "0x3bE454C4391690ab4DDae3Fb987c8147b8Ecc08A",
+      "comment": "scrvUSD/USDAF",
+      "stakedao_enabled": true,
+      "beefy_enabled": true
+    },
+    {
+      "chain": "ethereum",
+      "pool": "0x98E9599dab3A936C35DE48E13E026Ef4eA20B5e6",
+      "comment": "frxUSD/USDf",
+      "stakedao_enabled": true,
+      "beefy_enabled": true
+    },
+    {
       "chain": "fraxtal",
       "pool": "0x15d1ed4418dA1F268bCAd5BA7c8d06BB3c3081eD",
       "comment": "frxUSD/FXB 2027",
@@ -38,6 +52,27 @@
       "stakedao_vault": "0xE7B60D6ABBa4E0a801ad29c9b824602aB9a0c439",
       "stakedao_enabled": true,
       "beefy_enabled": false
+    },
+    {
+      "chain": "plasma",
+      "pool": "0x2d84d79c852f6842abe0304b70bbaa1506add457",
+      "comment": "USDT/USDe (Lagoon wallet)",
+      "stakedao_enabled": false,
+      "beefy_enabled": false
+    },
+    {
+      "chain": "plasma",
+      "pool": "0x1e8d78e9b3f0152d54d32904b7933f1cfe439df1",
+      "comment": "sUSDe/USDT (Lagoon wallet)",
+      "stakedao_enabled": false,
+      "beefy_enabled": false
+    },
+    {
+      "chain": "ethereum",
+      "pool": "0xE99810Cd5AdCD7b13455aE1BE678B382d61f2d1E",
+      "comment": "USD3/scrvUSD",
+      "enabled": true,
+      "stakedao_enabled": true
     }
   ]
 }
