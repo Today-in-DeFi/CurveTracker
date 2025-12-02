@@ -7,13 +7,20 @@ Fetches TVL, APY, and rewards data for Curve pools
 import requests
 import json
 from typing import Dict, List, Optional, Union
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from tabulate import tabulate
 import argparse
 import sys
 import os
 from datetime import datetime
 from dotenv import load_dotenv
+
+# Plasma on-chain data fetcher
+try:
+    from plasma_onchain import get_fetcher as get_plasma_fetcher
+    PLASMA_ONCHAIN_AVAILABLE = True
+except ImportError:
+    PLASMA_ONCHAIN_AVAILABLE = False
 
 # Google Sheets imports (optional)
 try:
@@ -43,6 +50,8 @@ class PoolData:
     coins: List[str]
     coin_ratios: List[str]
     eth_amounts: List[str]  # ETH amounts for ETH pools
+    coin_amounts: List[float] = field(default_factory=list)  # Individual coin amounts
+    coin_prices: List[float] = field(default_factory=list)   # Individual coin prices
     # StakeDAO fields
     stakedao_apy: Optional[float] = None
     stakedao_tvl: Optional[float] = None
@@ -357,8 +366,51 @@ class CurveTracker:
     def _get_manual_pool_data(self, chain: str, pool_identifier: str) -> Optional[Dict]:
         """Get manually configured pool data for chains not supported by Curve API"""
         # Only return manual data for truly unsupported chains
-        # Fraxtal is now supported by Curve API, so no manual overrides needed
-        manual_pools = {}
+        # Plasma: Curve deployed Sept 2025, but API doesn't index pools yet
+        manual_pools = {
+            'plasma': {
+                '0x2d84d79c852f6842abe0304b70bbaa1506add457': {
+                    'address': '0x2d84d79c852f6842abe0304b70bbaa1506add457',
+                    'name': 'USDT/USDe',
+                    'coins': [
+                        {
+                            'address': '0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb',
+                            'symbol': 'USDT',
+                            'decimals': 6,
+                            'poolBalance': 0,
+                            'usdPrice': 1.0
+                        },
+                        {
+                            'address': '0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34',
+                            'symbol': 'USDe',
+                            'decimals': 18,
+                            'poolBalance': 0,
+                            'usdPrice': 1.0
+                        }
+                    ]
+                },
+                '0x1e8d78e9b3f0152d54d32904b7933f1cfe439df1': {
+                    'address': '0x1e8d78e9b3f0152d54d32904b7933f1cfe439df1',
+                    'name': 'USDT/sUSDe',
+                    'coins': [
+                        {
+                            'address': '0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb',
+                            'symbol': 'USDT',
+                            'decimals': 6,
+                            'poolBalance': 0,
+                            'usdPrice': 1.0
+                        },
+                        {
+                            'address': '0x211Cc4DD073734dA055fbF44a2b4667d5E5fE5d2',
+                            'symbol': 'sUSDe',
+                            'decimals': 18,
+                            'poolBalance': 0,
+                            'usdPrice': 1.0
+                        }
+                    ]
+                }
+            }
+        }
 
         chain_data = manual_pools.get(chain.lower(), {})
         pool_address = pool_identifier.lower()
@@ -410,7 +462,21 @@ class CurveTracker:
         # Get volume/TVL data
         volume_data = self.get_pool_volume_data(chain, pool_address)
         tvl = volume_data.get('usdTotal', 0)
-        
+
+        # Fetch on-chain data for Plasma pools
+        if chain.lower() == 'plasma' and PLASMA_ONCHAIN_AVAILABLE and 'coins' in pool:
+            try:
+                fetcher = get_plasma_fetcher()
+                tokens = [{'symbol': coin['symbol'], 'decimals': coin['decimals']} for coin in pool['coins']]
+                onchain_data = fetcher.get_pool_data(pool_address, tokens)
+                tvl = onchain_data['tvl']
+                # Update coin balances with real on-chain data
+                for i, coin in enumerate(pool['coins']):
+                    if i < len(onchain_data['balances']):
+                        coin['poolBalance'] = onchain_data['coin_amounts'][i]
+            except Exception as e:
+                print(f"Warning: Failed to fetch on-chain data for Plasma pool: {e}")
+
         # If no TVL from volume API, calculate from pool balances
         if tvl == 0 and 'coins' in pool:
             tvl = 0
@@ -448,6 +514,8 @@ class CurveTracker:
         coins = []
         coin_ratios = []
         eth_amounts = []
+        coin_amounts = []
+        coin_prices = []
         if 'coins' in pool:
             total_usd_value = 0
             coin_values = []
@@ -468,8 +536,13 @@ class CurveTracker:
                     coin_values.append({
                         'symbol': symbol,
                         'balance': readable_balance,
-                        'usd_value': usd_value
+                        'usd_value': usd_value,
+                        'price': price
                     })
+
+                    # Store individual amounts and prices
+                    coin_amounts.append(readable_balance)
+                    coin_prices.append(price)
 
                     # Store ETH amounts (always store, will be filtered later if needed)
                     eth_amounts.append(f"{symbol}: {readable_balance:.4f}")
@@ -588,6 +661,8 @@ class CurveTracker:
             coins=coins,
             coin_ratios=coin_ratios,
             eth_amounts=eth_amounts,
+            coin_amounts=coin_amounts,
+            coin_prices=coin_prices,
             stakedao_apy=stakedao_apy,
             stakedao_tvl=stakedao_tvl,
             stakedao_boost=stakedao_boost,
@@ -669,7 +744,7 @@ class GoogleSheetsExporter:
         except Exception as e:
             raise Exception(f"Google Sheets authentication failed: {e}")
     
-    def get_or_create_worksheet(self, spreadsheet: gspread.Spreadsheet, sheet_name: str, use_eth_units: bool = False) -> gspread.Worksheet:
+    def get_or_create_worksheet(self, spreadsheet: gspread.Spreadsheet, sheet_name: str, max_coins: int = 2) -> gspread.Worksheet:
         """Get existing worksheet or create new one with headers"""
         try:
             worksheet = spreadsheet.worksheet(sheet_name)
@@ -677,23 +752,35 @@ class GoogleSheetsExporter:
             return worksheet
         except gspread.exceptions.WorksheetNotFound:
             print(f"📝 Creating new sheet: {sheet_name}")
-            worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=12)
 
-            # Asset ratio column should always be "Coin Ratios" with percentages
-            coin_column = 'Coin Ratios'
+            # Calculate total columns needed
+            base_cols = 10  # Date, Time, Pool Name, Coin Ratios, TVL, Base APY, CRV Min/Max, Other Rewards, Address
+            coin_cols = max_coins * 2  # Amount and Price for each coin
+            integration_cols = 5  # StakeDAO APY, TVL, Boost, Beefy APY, TVL
+            total_cols = base_cols + coin_cols + integration_cols
+
+            worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=total_cols)
 
             headers = [
-                'Date', 'Time', 'Pool Name', coin_column,
+                'Date', 'Time', 'Pool Name', 'Coin Ratios (USD Value)',
                 'TVL (USD)', 'Base APY (%)', 'CRV Rewards Min (%)', 'CRV Rewards Max (%)',
-                'Other Rewards', 'Address', 'StakeDAO APY (%)', 'StakeDAO TVL (USD)',
-                'StakeDAO Boost', 'Beefy APY (%)', 'Beefy TVL (USD)'
+                'Other Rewards', 'StakeDAO APY (%)', 'StakeDAO TVL (USD)',
+                'StakeDAO Boost', 'Beefy APY (%)', 'Beefy TVL (USD)', 'Address'
             ]
-            worksheet.update(values=[headers], range_name='A1:O1')
+
+            # Add coin amount and price columns at the end
+            for i in range(max_coins):
+                headers.extend([
+                    f'Coin {i+1} Amount',
+                    f'Coin {i+1} Price'
+                ])
+
+            worksheet.update(values=[headers], range_name=f'A1:{chr(65+len(headers)-1)}1')
             print(f"📋 Added headers to new sheet")
 
             return worksheet
     
-    def format_data_for_sheets(self, pool_data_list: List[PoolData], use_eth_units: bool = False) -> pd.DataFrame:
+    def format_data_for_sheets(self, pool_data_list: List[PoolData], max_coins: int = 2) -> pd.DataFrame:
         """Convert pool data to DataFrame format for Google Sheets"""
         now = datetime.now()
         date_str = now.strftime('%Y-%m-%d')
@@ -723,7 +810,7 @@ class GoogleSheetsExporter:
             # Asset ratio column should always use percentages (coin_ratios)
             coin_data_str = ", ".join(pool.coin_ratios)
 
-            rows.append([
+            row = [
                 date_str,
                 time_str,
                 pool.name,
@@ -733,23 +820,42 @@ class GoogleSheetsExporter:
                 crv_min,
                 crv_max,
                 other_rewards_str,
-                pool.address,
                 pool.stakedao_apy if pool.stakedao_apy is not None else "",
                 pool.stakedao_tvl if pool.stakedao_tvl is not None else "",
                 pool.stakedao_boost if pool.stakedao_boost is not None else "",
                 pool.beefy_apy if pool.beefy_apy is not None else "",
-                pool.beefy_tvl if pool.beefy_tvl is not None else ""
-            ])
+                pool.beefy_tvl if pool.beefy_tvl is not None else "",
+                pool.address
+            ]
 
-        # Asset ratio column should always be called "Coin Ratios"
-        coin_column = 'Coin Ratios'
+            # Add coin amounts and prices at the end
+            for i in range(max_coins):
+                if pool.coin_amounts and i < len(pool.coin_amounts):
+                    row.append(pool.coin_amounts[i])
+                else:
+                    row.append("")
 
+                if pool.coin_prices and i < len(pool.coin_prices):
+                    row.append(pool.coin_prices[i])
+                else:
+                    row.append("")
+
+            rows.append(row)
+
+        # Build column headers
         columns = [
-            'Date', 'Time', 'Pool Name', coin_column,
+            'Date', 'Time', 'Pool Name', 'Coin Ratios (USD Value)',
             'TVL (USD)', 'Base APY (%)', 'CRV Rewards Min (%)', 'CRV Rewards Max (%)',
-            'Other Rewards', 'Address', 'StakeDAO APY (%)', 'StakeDAO TVL (USD)',
-            'StakeDAO Boost', 'Beefy APY (%)', 'Beefy TVL (USD)'
+            'Other Rewards', 'StakeDAO APY (%)', 'StakeDAO TVL (USD)',
+            'StakeDAO Boost', 'Beefy APY (%)', 'Beefy TVL (USD)', 'Address'
         ]
+
+        # Add coin amount and price columns at the end
+        for i in range(max_coins):
+            columns.extend([
+                f'Coin {i+1} Amount',
+                f'Coin {i+1} Price'
+            ])
 
         return pd.DataFrame(rows, columns=columns)
     
@@ -784,31 +890,32 @@ class GoogleSheetsExporter:
             print(f"❌ Error accessing spreadsheet: {e}")
             return
         
+        # Determine the maximum number of coins across all pools
+        max_coins = max(len(p.coins) for p in pool_data_list) if pool_data_list else 2
+
         # Group pools by chain and asset type (USD vs ETH)
         pools_by_category = {}
         for pool in pool_data_list:
             chain = pool.chain.title()
-            
+
             # Determine if this is an ETH-based pool
             is_eth_pool = self._is_eth_pool(pool)
-            
+
             if is_eth_pool:
                 category = f"{chain} ETH"
             else:
                 category = f"{chain} USD"
-            
+
             if category not in pools_by_category:
                 pools_by_category[category] = []
             pools_by_category[category].append(pool)
-        
+
         # Export each category to its own worksheet
         for category, pools in pools_by_category.items():
-            # Check if this is an ETH category
-            is_eth_category = "ETH" in category
-            worksheet = self.get_or_create_worksheet(spreadsheet, category, use_eth_units=is_eth_category)
+            worksheet = self.get_or_create_worksheet(spreadsheet, category, max_coins=max_coins)
 
-            # Convert to DataFrame - asset ratios always use percentages regardless of pool type
-            df = self.format_data_for_sheets(pools, use_eth_units=False)
+            # Convert to DataFrame with coin amount/price columns
+            df = self.format_data_for_sheets(pools, max_coins=max_coins)
             
             if append_data:
                 # Append to existing data
@@ -860,11 +967,14 @@ def print_results(pool_data_list: List[PoolData]):
     has_stakedao = any(p.stakedao_apy is not None or p.stakedao_tvl is not None for p in pool_data_list)
     has_beefy = any(p.beefy_apy is not None or p.beefy_tvl is not None for p in pool_data_list)
 
+    # Determine the maximum number of coins across all pools
+    max_coins = max(len(p.coins) for p in pool_data_list) if pool_data_list else 0
+
     headers = [
         "Pool Name",
         "Chain",
         "Coins",
-        "Coin Ratios",
+        "Coin Ratios (USD Value)",
         "TVL",
         "Base APY (%)",
         "CRV Rewards (%)",
@@ -884,6 +994,16 @@ def print_results(pool_data_list: List[PoolData]):
         headers.extend([
             "Beefy APY (%)",
             "Beefy TVL"
+        ])
+
+    # Add address column
+    headers.append("Address")
+
+    # Add dynamic coin amount and price columns at the end
+    for i in range(max_coins):
+        headers.extend([
+            f"Coin {i+1} Amount",
+            f"Coin {i+1} Price"
         ])
     
     rows = []
@@ -949,6 +1069,21 @@ def print_results(pool_data_list: List[PoolData]):
                 beefy_tvl_str
             ])
 
+        # Add address column
+        row.append(pool.address)
+
+        # Add coin amount and price columns at the end
+        for i in range(max_coins):
+            if pool.coin_amounts and i < len(pool.coin_amounts):
+                row.append(f"{pool.coin_amounts[i]:,.2f}")
+            else:
+                row.append("N/A")
+
+            if pool.coin_prices and i < len(pool.coin_prices):
+                row.append(f"${pool.coin_prices[i]:,.4f}")
+            else:
+                row.append("N/A")
+
         rows.append(row)
     
     print(tabulate(rows, headers=headers, tablefmt="grid"))
@@ -985,7 +1120,87 @@ def main():
     parser.add_argument('--replace-data', action='store_true',
                        help='Replace existing data (same as default behavior)')
 
+    # JSON export arguments
+    parser.add_argument('--export-json', action='store_true',
+                       help='Export data to JSON and upload to Google Drive')
+    parser.add_argument('--json-only', action='store_true', default=True,
+                       help='Export to JSON file only (no Drive upload) - enabled by default')
+    parser.add_argument('--no-json', action='store_true',
+                       help='Disable JSON export')
+    parser.add_argument('--drive-folder-id',
+                       help='Google Drive folder ID for uploads')
+    parser.add_argument('--archive', action='store_true',
+                       help='Also create dated archive file')
+
+    # Pool management arguments
+    parser.add_argument('--add-pool', nargs=2, metavar=('CHAIN', 'POOL'),
+                       help='Add a new pool to track (e.g., --add-pool ethereum 0xabc...)')
+    parser.add_argument('--remove-pool', nargs=2, metavar=('CHAIN', 'POOL'),
+                       help='Remove a pool from tracking')
+    parser.add_argument('--list-pools', action='store_true',
+                       help='List all tracked pools')
+    parser.add_argument('--pool-stats', action='store_true',
+                       help='Show pool tracking statistics')
+    parser.add_argument('--comment',
+                       help='Comment/description for --add-pool')
+    parser.add_argument('--no-validate', action='store_true',
+                       help='Skip validation when adding pool')
+
     args = parser.parse_args()
+
+    # Handle pool management commands first (these exit after executing)
+    if args.add_pool or args.remove_pool or args.list_pools or args.pool_stats:
+        try:
+            from pool_manager import PoolManager
+            manager = PoolManager()
+
+            if args.add_pool:
+                chain, pool = args.add_pool
+                manager.add_pool(
+                    chain=chain,
+                    pool=pool,
+                    comment=args.comment,
+                    stakedao_enabled=args.stakedao if args.stakedao else None,
+                    beefy_enabled=args.beefy if args.beefy else None,
+                    validate=not args.no_validate
+                )
+                sys.exit(0)
+
+            if args.remove_pool:
+                chain, pool = args.remove_pool
+                manager.remove_pool(chain, pool)
+                sys.exit(0)
+
+            if args.list_pools:
+                pools = manager.list_pools()
+                if not pools:
+                    print("No pools configured")
+                else:
+                    print(f"\n📋 Tracked Pools ({len(pools)}):")
+                    print("=" * 80)
+                    for p in pools:
+                        comment = f" - {p['comment']}" if 'comment' in p else ""
+                        print(f"  {p['chain']}/{p['pool']}{comment}")
+                        if p.get('stakedao_enabled'):
+                            print(f"    ✓ StakeDAO enabled")
+                        if p.get('beefy_enabled'):
+                            print(f"    ✓ Beefy enabled")
+                    print("=" * 80)
+                sys.exit(0)
+
+            if args.pool_stats:
+                manager.print_stats()
+                sys.exit(0)
+
+        except ImportError:
+            print("❌ Error: pool_manager.py not found")
+            print("Make sure pool_manager.py is in the same directory")
+            sys.exit(1)
+        except Exception as e:
+            print(f"❌ Pool management error: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
 
     # Check for StakeDAO and Beefy flags in JSON config or CLI
     enable_stakedao = args.stakedao
@@ -1102,6 +1317,84 @@ def main():
                     sys.exit(1)
                 else:
                     print("💡 Auto-export failed, but continuing with terminal output...")
+
+    # Export to JSON (and optionally upload to Google Drive)
+    # JSON export is enabled by default unless --no-json is specified
+    if (args.export_json or args.json_only) and not args.no_json:
+        if not results:
+            print("\n❌ No data to export to JSON")
+        else:
+            try:
+                print(f"\n📦 Exporting to JSON...")
+
+                # Import exporter
+                from json_exporter import CurveDataExporter
+
+                exporter = CurveDataExporter(output_dir="data")
+
+                # Export main file
+                filepath = exporter.export_to_json(results)
+
+                # Export archive if requested
+                if args.archive:
+                    archive_path = exporter.export_daily_archive(results)
+                    print(f"📁 Created archive: {archive_path}")
+
+                # Upload to Drive if --export-json (not --json-only)
+                if args.export_json and not args.json_only:
+                    try:
+                        from drive_uploader import DriveUploader
+
+                        print("📤 Uploading to Google Drive...")
+
+                        credentials_file = args.credentials or os.getenv('GOOGLE_CREDENTIALS_FILE') or 'Google Credentials.json'
+                        uploader = DriveUploader(
+                            creds_file=credentials_file,
+                            folder_id=args.drive_folder_id
+                        )
+
+                        # Upload main file
+                        result = uploader.upload_json(filepath, "curve_pools_latest.json")
+
+                        if result['success']:
+                            print(f"✅ JSON data uploaded successfully!")
+                            print(f"🔗 Public URL: {result['url']}")
+                            print(f"📋 File ID: {result['file_id']}")
+
+                            # Upload archive if created
+                            if args.archive:
+                                archive_filename = os.path.basename(archive_path)
+                                archive_result = uploader.upload_json(archive_path, archive_filename)
+                                if archive_result['success']:
+                                    print(f"📁 Archive uploaded: {archive_filename}")
+
+                            # Cleanup old archives (keep 30 days)
+                            deleted = uploader.cleanup_old_archives(days_to_keep=30)
+                            if deleted > 0:
+                                print(f"🗑️  Cleaned up {deleted} old archive(s)")
+                        else:
+                            print(f"❌ Upload failed: {result['error']}")
+                            sys.exit(1)
+
+                    except ImportError as e:
+                        print(f"❌ Error: Missing required libraries for Drive upload")
+                        print("Install with: pip install google-api-python-client google-auth")
+                        sys.exit(1)
+                    except Exception as e:
+                        print(f"❌ Failed to upload to Google Drive: {e}")
+                        sys.exit(1)
+                else:
+                    print(f"💾 JSON saved locally: {filepath}")
+
+            except ImportError:
+                print("❌ Error: json_exporter.py not found")
+                print("Make sure json_exporter.py is in the same directory")
+                sys.exit(1)
+            except Exception as e:
+                print(f"❌ Failed to export JSON: {e}")
+                import traceback
+                traceback.print_exc()
+                sys.exit(1)
 
 
 if __name__ == "__main__":
