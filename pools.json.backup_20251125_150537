@@ -4,13 +4,6 @@
   "pools": [
     {
       "chain": "ethereum",
-      "pool": "0xed785Af60bEd688baa8990cD5c4166221599A441",
-      "comment": "reUSD/sfrxUSD",
-      "stakedao_enabled": false,
-      "beefy_enabled": true
-    },
-    {
-      "chain": "ethereum",
       "pool": "0xc522A6606BBA746d7960404F22a3DB936B6F4F50",
       "comment": "reUSD/scrvUSD",
       "stakedao_enabled": true,
@@ -73,21 +66,6 @@
       "comment": "sUSDe/USDT (Lagoon wallet)",
       "stakedao_enabled": false,
       "beefy_enabled": false
-    },
-    {
-      "chain": "ethereum",
-      "pool": "0xE99810Cd5AdCD7b13455aE1BE678B382d61f2d1E",
-      "comment": "USD3/scrvUSD",
-      "enabled": true,
-      "stakedao_enabled": true
-    },
-    {
-      "chain": "ethereum",
-      "pool": "0x635ef0056a597d13863b73825cca297236578595",
-      "comment": "GHO/crvUSD",
-      "stakedao_enabled": true,
-      "beefy_enabled": false,
-      "stakedao_vault": "0x5af2c210042fb964c0c10b221ae445ce9d567c57"
     }
   ]
 }

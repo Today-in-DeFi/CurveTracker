@@ -944,6 +944,210 @@ class GoogleSheetsExporter:
         
         print(f"✅ Successfully exported {len(pool_data_list)} pools to Google Sheets")
 
+    def _cleanup_old_log_data(
+        self,
+        worksheet: gspread.Worksheet,
+        days_to_keep: int = 30
+    ) -> int:
+        """
+        Remove log entries older than specified days.
+
+        Args:
+            worksheet: The Log worksheet to clean
+            days_to_keep: Number of days of history to retain (default: 30)
+
+        Returns:
+            Number of rows deleted
+        """
+        from datetime import timedelta
+
+        try:
+            # Get all values from the sheet
+            all_values = worksheet.get_all_values()
+
+            if len(all_values) <= 1:
+                # Only header row or empty sheet
+                return 0
+
+            # First row is headers, keep it
+            headers = all_values[0]
+            data_rows = all_values[1:]
+
+            # Calculate cutoff date
+            cutoff_date = datetime.now() - timedelta(days=days_to_keep)
+
+            # Filter rows to keep
+            rows_to_keep = []
+            rows_deleted = 0
+
+            for row in data_rows:
+                if not row or len(row) < 2:
+                    continue
+
+                # Date is in column 0, Time is in column 1
+                date_str = row[0]
+                time_str = row[1]
+                try:
+                    # Parse date and time (format: 'YYYY-MM-DD' and 'HH:MM:SS')
+                    timestamp_str = f"{date_str} {time_str}"
+                    row_timestamp = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
+
+                    if row_timestamp >= cutoff_date:
+                        rows_to_keep.append(row)
+                    else:
+                        rows_deleted += 1
+                except (ValueError, IndexError):
+                    # Keep rows with malformed timestamps to be safe
+                    rows_to_keep.append(row)
+
+            # Only rewrite if we're deleting rows
+            if rows_deleted > 0:
+                # Clear the sheet
+                worksheet.clear()
+
+                # Rewrite with headers + filtered data
+                new_data = [headers] + rows_to_keep
+                worksheet.update(values=new_data, range_name='A1')
+
+                print(f"🗑️  Cleaned up {rows_deleted} old rows (keeping last {days_to_keep} days)")
+
+            return rows_deleted
+
+        except Exception as e:
+            print(f"⚠️  Warning: Could not cleanup old log data: {e}")
+            return 0
+
+    def export_to_log_sheet(
+        self,
+        pool_data_list: List[PoolData],
+        spreadsheet_id: Optional[str] = None,
+        spreadsheet_name: Optional[str] = None,
+        days_to_keep: int = 30
+    ) -> None:
+        """
+        Export pool data to 'Log' sheet for time-series tracking.
+
+        Creates multiple rows per timestamp (one row per pool) with consistent columns.
+        Format: Date | Time | Pool Name | Coin Ratios | TVL | Base APY | CRV Min | CRV Max | ...
+
+        Automatically cleans up rows older than specified days to keep sheet performant.
+
+        Args:
+            pool_data_list: List of pool data to log
+            spreadsheet_id: Optional spreadsheet ID
+            spreadsheet_name: Optional spreadsheet name (defaults to "Curve Pool Tracker")
+            days_to_keep: Number of days of history to retain (default: 30)
+        """
+        if not pool_data_list:
+            print("⚠️  No pool data to log")
+            return
+
+        client = self.get_client()
+
+        # Get spreadsheet
+        try:
+            if spreadsheet_id:
+                spreadsheet = client.open_by_key(spreadsheet_id)
+            elif spreadsheet_name:
+                spreadsheet = client.open(spreadsheet_name)
+            else:
+                spreadsheet_name = "Curve Pool Tracker"
+                spreadsheet = client.open(spreadsheet_name)
+
+            print(f"📊 Logging to spreadsheet: {spreadsheet.title}")
+        except Exception as e:
+            print(f"❌ Error accessing spreadsheet for log: {e}")
+            return
+
+        # Sort pools consistently (by chain, then name)
+        sorted_pools = sorted(pool_data_list, key=lambda p: (p.chain, p.name))
+
+        # Get or create Log sheet
+        sheet_name = "Log"
+        try:
+            worksheet = spreadsheet.worksheet(sheet_name)
+            print(f"✅ Found existing Log sheet")
+        except gspread.exceptions.WorksheetNotFound:
+            print(f"📝 Creating new Log sheet")
+
+            worksheet = spreadsheet.add_worksheet(
+                title=sheet_name,
+                rows=10000,  # More rows since we'll have multiple per timestamp
+                cols=20
+            )
+
+            # Build headers (same format as individual category sheets)
+            headers = [
+                'Date', 'Time', 'Pool Name', 'Chain', 'Coin Ratios (USD Value)',
+                'TVL (USD)', 'Base APY (%)', 'CRV Rewards Min (%)', 'CRV Rewards Max (%)',
+                'Other Rewards', 'StakeDAO APY (%)', 'StakeDAO TVL (USD)',
+                'StakeDAO Boost', 'Beefy APY (%)', 'Beefy TVL (USD)', 'Address'
+            ]
+
+            # Write headers
+            worksheet.update(values=[headers], range_name=f'A1')
+            print(f"📋 Created Log sheet with headers")
+
+        # Cleanup old data (keep only last N days)
+        self._cleanup_old_log_data(worksheet, days_to_keep=days_to_keep)
+
+        # Build data rows (one per pool)
+        now = datetime.now()
+        date_str = now.strftime('%Y-%m-%d')
+        time_str = now.strftime('%H:%M:%S')
+
+        rows_to_append = []
+        for pool in sorted_pools:
+            # Parse CRV rewards
+            if isinstance(pool.crv_rewards_apy, list) and len(pool.crv_rewards_apy) >= 2:
+                crv_min = pool.crv_rewards_apy[0]
+                crv_max = pool.crv_rewards_apy[1]
+            elif isinstance(pool.crv_rewards_apy, list) and len(pool.crv_rewards_apy) == 1:
+                crv_min = crv_max = pool.crv_rewards_apy[0]
+            elif isinstance(pool.crv_rewards_apy, (int, float)):
+                crv_min = crv_max = pool.crv_rewards_apy
+            else:
+                crv_min = crv_max = 0
+
+            # Format other rewards
+            other_rewards_str = ""
+            if pool.other_rewards:
+                rewards_list = [f"{r['token']}: {r['apy']:.2f}%" for r in pool.other_rewards]
+                other_rewards_str = ", ".join(rewards_list)
+            else:
+                other_rewards_str = "None"
+
+            # Format coin ratios
+            coin_ratios_str = ", ".join(pool.coin_ratios)
+
+            row = [
+                date_str,
+                time_str,
+                pool.name,
+                pool.chain.title(),
+                coin_ratios_str,
+                pool.tvl,
+                pool.base_apy,
+                crv_min,
+                crv_max,
+                other_rewards_str,
+                pool.stakedao_apy if pool.stakedao_apy is not None else "",
+                pool.stakedao_tvl if pool.stakedao_tvl is not None else "",
+                pool.stakedao_boost if pool.stakedao_boost is not None else "",
+                pool.beefy_apy if pool.beefy_apy is not None else "",
+                pool.beefy_tvl if pool.beefy_tvl is not None else "",
+                pool.address
+            ]
+            rows_to_append.append(row)
+
+        # Insert rows at top (after headers) - newest data first
+        try:
+            if rows_to_append:
+                worksheet.insert_rows(rows_to_append, row=2, value_input_option='USER_ENTERED')
+                print(f"✅ Logged {len(rows_to_append)} pool snapshots at {date_str} {time_str}")
+        except Exception as e:
+            print(f"❌ Error appending to Log sheet: {e}")
+
 
 def format_currency(amount: float) -> str:
     """Format currency with appropriate suffixes"""
@@ -1307,6 +1511,13 @@ def main():
                     spreadsheet_name=args.sheet_name,
                     append_data=append_data
                 )
+
+                # Also export to Log sheet for time-series tracking
+                exporter.export_to_log_sheet(
+                    results,
+                    spreadsheet_id=args.sheet_id,
+                    spreadsheet_name=args.sheet_name
+                )
             except Exception as e:
                 print(f"\n❌ Failed to export to Google Sheets: {e}")
                 print("Make sure you have:")
@@ -1334,6 +1545,9 @@ def main():
 
                 # Export main file
                 filepath = exporter.export_to_json(results)
+
+                # Append to cumulative history
+                exporter.append_to_history(results)
 
                 # Export archive if requested
                 if args.archive:
@@ -1367,6 +1581,15 @@ def main():
                                 archive_result = uploader.upload_json(archive_path, archive_filename)
                                 if archive_result['success']:
                                     print(f"📁 Archive uploaded: {archive_filename}")
+
+                            # Upload history file (cumulative time-series data)
+                            history_filepath = os.path.join("data", "curve_pools_history.json")
+                            if os.path.exists(history_filepath):
+                                history_result = uploader.upload_json(history_filepath, "curve_pools_history.json")
+                                if history_result['success']:
+                                    print(f"📊 History file uploaded")
+                                else:
+                                    print(f"⚠️  Warning: History upload failed: {history_result.get('error', 'Unknown error')}")
 
                             # Cleanup old archives (keep 30 days)
                             deleted = uploader.cleanup_old_archives(days_to_keep=30)
