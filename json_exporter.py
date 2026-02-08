@@ -159,6 +159,10 @@ class CurveDataExporter:
                     "boost": round(pool.stakedao_boost, 2) if pool.stakedao_boost else None,
                     "fees": pool.stakedao_fees
                 }
+                # Flat fields for consumers that expect top-level keys
+                pool_data["latest"]["stakedao_vault_apy"] = round(pool.stakedao_apy, 2)
+                pool_data["latest"]["stakedao_tvl"] = round(pool.stakedao_tvl, 2) if pool.stakedao_tvl else None
+                pool_data["latest"]["stakedao_boost"] = round(pool.stakedao_boost, 2) if pool.stakedao_boost else None
 
             # Add Beefy data if available
             if pool.beefy_apy is not None:
@@ -167,6 +171,9 @@ class CurveDataExporter:
                     "tvl": round(pool.beefy_tvl, 2) if pool.beefy_tvl else None,
                     "vault_id": pool.beefy_vault_id
                 }
+                # Flat fields for consumers that expect top-level keys
+                pool_data["latest"]["beefy_apy"] = round(pool.beefy_apy, 2)
+                pool_data["latest"]["beefy_tvl"] = round(pool.beefy_tvl, 2) if pool.beefy_tvl else None
 
             # Add coin details if available
             if pool.coin_amounts and pool.coin_prices:
