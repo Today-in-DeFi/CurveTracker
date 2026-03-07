@@ -80,12 +80,15 @@ class CurveDataExporter:
         # Check which integrations have data
         has_stakedao = any(p.stakedao_apy is not None for p in pool_data_list)
         has_beefy = any(p.beefy_apy is not None for p in pool_data_list)
+        has_convex = any(p.convex_apy is not None for p in pool_data_list)
 
         integrations = ["Curve"]
         if has_stakedao:
             integrations.append("StakeDAO")
         if has_beefy:
             integrations.append("Beefy")
+        if has_convex:
+            integrations.append("Convex")
 
         return {
             "generated_at": timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -174,6 +177,17 @@ class CurveDataExporter:
                 # Flat fields for consumers that expect top-level keys
                 pool_data["latest"]["beefy_apy"] = round(pool.beefy_apy, 2)
                 pool_data["latest"]["beefy_tvl"] = round(pool.beefy_tvl, 2) if pool.beefy_tvl else None
+
+            # Add Convex data if available
+            if pool.convex_apy is not None:
+                pool_data["latest"]["convex"] = {
+                    "apy": round(pool.convex_apy, 2),
+                    "tvl": round(pool.convex_tvl, 2) if pool.convex_tvl else None,
+                    "pool_id": pool.convex_pool_id
+                }
+                # Flat fields for consumers that expect top-level keys
+                pool_data["latest"]["convex_apy"] = round(pool.convex_apy, 2)
+                pool_data["latest"]["convex_tvl"] = round(pool.convex_tvl, 2) if pool.convex_tvl else None
 
             # Add coin details if available
             if pool.coin_amounts and pool.coin_prices:
@@ -403,6 +417,11 @@ class CurveDataExporter:
                 snapshot["beefy_apy"] = round(pool.beefy_apy, 2)
                 if pool.beefy_tvl is not None:
                     snapshot["beefy_tvl"] = round(pool.beefy_tvl, 2)
+
+            if pool.convex_apy is not None:
+                snapshot["convex_apy"] = round(pool.convex_apy, 2)
+                if pool.convex_tvl is not None:
+                    snapshot["convex_tvl"] = round(pool.convex_tvl, 2)
 
             # Append snapshot
             history["pools"][pool_id]["snapshots"].append(snapshot)

@@ -62,6 +62,10 @@ class PoolData:
     beefy_boost: Optional[float] = None
     beefy_tvl: Optional[float] = None
     beefy_vault_id: Optional[str] = None
+    # Convex fields
+    convex_apy: Optional[float] = None
+    convex_tvl: Optional[float] = None
+    convex_pool_id: Optional[int] = None
 
 
 class CurveAPI:
@@ -232,17 +236,107 @@ class BeefyAPI:
         return None
 
 
+class ConvexAPI:
+    POOLS_URL = "https://curve.convexfinance.com/api/curve/pools"
+    APYS_URL = "https://curve.convexfinance.com/api/curve-apys"
+
+    def __init__(self):
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'CurveTracker/1.0'
+        })
+        self._pools_cache = None
+        self._apys_cache = None
+
+    def _fetch_pools(self) -> List[Dict]:
+        """Fetch all pool data from Convex API"""
+        if self._pools_cache is not None:
+            return self._pools_cache
+        try:
+            response = self.session.get(self.POOLS_URL, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+            self._pools_cache = data.get('pools', data) if isinstance(data, dict) else data
+            return self._pools_cache
+        except requests.exceptions.RequestException as e:
+            print(f"Convex pools API request failed: {e}")
+            self._pools_cache = []
+            return []
+
+    def _fetch_apys(self) -> Dict:
+        """Fetch APY data from Convex API"""
+        if self._apys_cache is not None:
+            return self._apys_cache
+        try:
+            response = self.session.get(self.APYS_URL, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+            self._apys_cache = data.get('apys', data) if isinstance(data, dict) else data
+            return self._apys_cache
+        except requests.exceptions.RequestException as e:
+            print(f"Convex APY API request failed: {e}")
+            self._apys_cache = {}
+            return {}
+
+    def find_pool_by_address(self, pool_address: str) -> Optional[Dict]:
+        """Find Convex pool data by Curve LP token / pool address"""
+        pools = self._fetch_pools()
+        pool_address_lower = pool_address.lower()
+        for p in pools:
+            if (p.get('address', '').lower() == pool_address_lower or
+                    p.get('lpTokenAddress', '').lower() == pool_address_lower):
+                return p
+        return None
+
+    def get_convex_data(self, pool_address: str) -> Dict:
+        """Get Convex APY and TVL for a Curve pool address.
+
+        Returns dict with keys: apy, tvl, pool_id, pool_key
+        """
+        pool = self.find_pool_by_address(pool_address)
+        if not pool:
+            return {}
+
+        convex_pool_data = pool.get('convexPoolData')
+        if not convex_pool_data:
+            return {}
+
+        pool_key = pool.get('id', '')
+        convex_pool_id = convex_pool_data.get('id')
+        convex_tvl = convex_pool_data.get('usdTotal')
+
+        # Get APY from the apys endpoint
+        apys = self._fetch_apys()
+        apy_entry = apys.get(pool_key, {})
+
+        convex_apy = None
+        if apy_entry:
+            base = apy_entry.get('baseApy', 0) or 0
+            crv = apy_entry.get('crvApy', 0) or 0
+            cvx = apy_entry.get('cvxApy', 0) or 0
+            convex_apy = base + crv + cvx
+
+        return {
+            'apy': convex_apy,
+            'tvl': convex_tvl,
+            'pool_id': convex_pool_id,
+            'pool_key': pool_key,
+        }
+
+
 class CurveTracker:
-    def __init__(self, enable_stakedao: bool = False, enable_beefy: bool = False):
+    def __init__(self, enable_stakedao: bool = False, enable_beefy: bool = False, enable_convex: bool = False):
         self.api = CurveAPI()
         self.stakedao_api = StakeDAOAPI() if enable_stakedao else None
         self.beefy_api = BeefyAPI() if enable_beefy else None
+        self.convex_api = ConvexAPI() if enable_convex else None
         self._pools_cache = {}
         self._gauges_cache = {}
         self._apys_cache = {}
         self._volumes_cache = {}
         self._stakedao_cache = {}
         self._beefy_cache = {}
+        self._convex_cache = {}
     
     def _load_chain_data(self, chain: str):
         """Load all data for a chain into cache"""
@@ -429,8 +523,18 @@ class CurveTracker:
             self._beefy_cache[chain][pool_address] = vault or {}
 
         return self._beefy_cache[chain][pool_address]
-    
-    def get_pool_data(self, chain: str, pool_identifier: str, stakedao_enabled: bool = None, beefy_enabled: bool = None) -> Optional[PoolData]:
+
+    def get_convex_pool_data(self, pool_address: str) -> Dict:
+        """Get Convex data for a pool"""
+        if not self.convex_api:
+            return {}
+
+        if pool_address not in self._convex_cache:
+            self._convex_cache[pool_address] = self.convex_api.get_convex_data(pool_address)
+
+        return self._convex_cache[pool_address]
+
+    def get_pool_data(self, chain: str, pool_identifier: str, stakedao_enabled: bool = None, beefy_enabled: bool = None, convex_enabled: bool = None) -> Optional[PoolData]:
         """Get comprehensive pool data by address or name"""
         # Check for manual pool data first (for chains not supported by Curve API)
         manual_pool = self._get_manual_pool_data(chain, pool_identifier)
@@ -649,6 +753,18 @@ class CurveTracker:
                                 beefy_boost = f"{earned_token} rewards"
                             break
 
+        # Get Convex data if enabled
+        convex_apy = None
+        convex_tvl = None
+        convex_pool_id = None
+
+        if self.convex_api and (convex_enabled if convex_enabled is not None else True):
+            convex_data = self.get_convex_pool_data(pool_address)
+            if convex_data:
+                convex_apy = convex_data.get('apy')
+                convex_tvl = convex_data.get('tvl')
+                convex_pool_id = convex_data.get('pool_id')
+
         return PoolData(
             name=pool.get('name', 'Unknown'),
             chain=chain,
@@ -670,7 +786,10 @@ class CurveTracker:
             beefy_apy=beefy_apy,
             beefy_boost=beefy_boost,
             beefy_tvl=beefy_tvl,
-            beefy_vault_id=beefy_vault_id
+            beefy_vault_id=beefy_vault_id,
+            convex_apy=convex_apy,
+            convex_tvl=convex_tvl,
+            convex_pool_id=convex_pool_id
         )
     
     def track_pools(self, pools: List[Dict[str, str]]) -> List[PoolData]:
@@ -681,8 +800,9 @@ class CurveTracker:
             pool_id = pool_info['pool']
             stakedao_enabled = pool_info.get('stakedao_enabled', False)
             beefy_enabled = pool_info.get('beefy_enabled', False)
+            convex_enabled = pool_info.get('convex_enabled', False)
 
-            pool_data = self.get_pool_data(chain, pool_id, stakedao_enabled, beefy_enabled)
+            pool_data = self.get_pool_data(chain, pool_id, stakedao_enabled, beefy_enabled, convex_enabled)
             if pool_data:
                 results.append(pool_data)
 
@@ -756,7 +876,7 @@ class GoogleSheetsExporter:
             # Calculate total columns needed
             base_cols = 10  # Date, Time, Pool Name, Coin Ratios, TVL, Base APY, CRV Min/Max, Other Rewards, Address
             coin_cols = max_coins * 2  # Amount and Price for each coin
-            integration_cols = 5  # StakeDAO APY, TVL, Boost, Beefy APY, TVL
+            integration_cols = 7  # StakeDAO APY, TVL, Boost, Beefy APY, TVL, Convex APY, TVL
             total_cols = base_cols + coin_cols + integration_cols
 
             worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=total_cols)
@@ -765,7 +885,8 @@ class GoogleSheetsExporter:
                 'Date', 'Time', 'Pool Name', 'Coin Ratios (USD Value)',
                 'TVL (USD)', 'Base APY (%)', 'CRV Rewards Min (%)', 'CRV Rewards Max (%)',
                 'Other Rewards', 'StakeDAO APY (%)', 'StakeDAO TVL (USD)',
-                'StakeDAO Boost', 'Beefy APY (%)', 'Beefy TVL (USD)', 'Address'
+                'StakeDAO Boost', 'Beefy APY (%)', 'Beefy TVL (USD)',
+                'Convex APY (%)', 'Convex TVL (USD)', 'Address'
             ]
 
             # Add coin amount and price columns at the end
@@ -825,6 +946,8 @@ class GoogleSheetsExporter:
                 pool.stakedao_boost if pool.stakedao_boost is not None else "",
                 pool.beefy_apy if pool.beefy_apy is not None else "",
                 pool.beefy_tvl if pool.beefy_tvl is not None else "",
+                pool.convex_apy if pool.convex_apy is not None else "",
+                pool.convex_tvl if pool.convex_tvl is not None else "",
                 pool.address
             ]
 
@@ -847,7 +970,8 @@ class GoogleSheetsExporter:
             'Date', 'Time', 'Pool Name', 'Coin Ratios (USD Value)',
             'TVL (USD)', 'Base APY (%)', 'CRV Rewards Min (%)', 'CRV Rewards Max (%)',
             'Other Rewards', 'StakeDAO APY (%)', 'StakeDAO TVL (USD)',
-            'StakeDAO Boost', 'Beefy APY (%)', 'Beefy TVL (USD)', 'Address'
+            'StakeDAO Boost', 'Beefy APY (%)', 'Beefy TVL (USD)',
+            'Convex APY (%)', 'Convex TVL (USD)', 'Address'
         ]
 
         # Add coin amount and price columns at the end
@@ -1081,7 +1205,8 @@ class GoogleSheetsExporter:
                 'Date', 'Time', 'Pool Name', 'Chain', 'Coin Ratios (USD Value)',
                 'TVL (USD)', 'Base APY (%)', 'CRV Rewards Min (%)', 'CRV Rewards Max (%)',
                 'Other Rewards', 'StakeDAO APY (%)', 'StakeDAO TVL (USD)',
-                'StakeDAO Boost', 'Beefy APY (%)', 'Beefy TVL (USD)', 'Address'
+                'StakeDAO Boost', 'Beefy APY (%)', 'Beefy TVL (USD)',
+                'Convex APY (%)', 'Convex TVL (USD)', 'Address'
             ]
 
             # Write headers
@@ -1136,6 +1261,8 @@ class GoogleSheetsExporter:
                 pool.stakedao_boost if pool.stakedao_boost is not None else "",
                 pool.beefy_apy if pool.beefy_apy is not None else "",
                 pool.beefy_tvl if pool.beefy_tvl is not None else "",
+                pool.convex_apy if pool.convex_apy is not None else "",
+                pool.convex_tvl if pool.convex_tvl is not None else "",
                 pool.address
             ]
             rows_to_append.append(row)
@@ -1170,6 +1297,7 @@ def print_results(pool_data_list: List[PoolData]):
     # Check if any pools have StakeDAO or Beefy data to determine if we need extra columns
     has_stakedao = any(p.stakedao_apy is not None or p.stakedao_tvl is not None for p in pool_data_list)
     has_beefy = any(p.beefy_apy is not None or p.beefy_tvl is not None for p in pool_data_list)
+    has_convex = any(p.convex_apy is not None or p.convex_tvl is not None for p in pool_data_list)
 
     # Determine the maximum number of coins across all pools
     max_coins = max(len(p.coins) for p in pool_data_list) if pool_data_list else 0
@@ -1198,6 +1326,13 @@ def print_results(pool_data_list: List[PoolData]):
         headers.extend([
             "Beefy APY (%)",
             "Beefy TVL"
+        ])
+
+    # Add Convex columns if any pool has Convex data
+    if has_convex:
+        headers.extend([
+            "Convex APY (%)",
+            "Convex TVL"
         ])
 
     # Add address column
@@ -1273,6 +1408,16 @@ def print_results(pool_data_list: List[PoolData]):
                 beefy_tvl_str
             ])
 
+        # Add Convex columns if needed
+        if has_convex:
+            convex_apy_str = f"{pool.convex_apy:.2f}" if pool.convex_apy is not None else "N/A"
+            convex_tvl_str = format_currency(pool.convex_tvl) if pool.convex_tvl is not None else "N/A"
+
+            row.extend([
+                convex_apy_str,
+                convex_tvl_str
+            ])
+
         # Add address column
         row.append(pool.address)
 
@@ -1309,6 +1454,10 @@ def main():
     # Beefy integration
     parser.add_argument('--beefy', action='store_true',
                        help='Enable Beefy data fetching')
+
+    # Convex integration
+    parser.add_argument('--convex', action='store_true',
+                       help='Enable Convex data fetching')
 
     # Google Sheets arguments
     parser.add_argument('--export-sheets', action='store_true',
@@ -1366,6 +1515,7 @@ def main():
                     comment=args.comment,
                     stakedao_enabled=args.stakedao if args.stakedao else None,
                     beefy_enabled=args.beefy if args.beefy else None,
+                    convex_enabled=args.convex if args.convex else None,
                     validate=not args.no_validate
                 )
                 sys.exit(0)
@@ -1389,6 +1539,8 @@ def main():
                             print(f"    ✓ StakeDAO enabled")
                         if p.get('beefy_enabled'):
                             print(f"    ✓ Beefy enabled")
+                        if p.get('convex_enabled'):
+                            print(f"    ✓ Convex enabled")
                     print("=" * 80)
                 sys.exit(0)
 
@@ -1406,22 +1558,24 @@ def main():
             traceback.print_exc()
             sys.exit(1)
 
-    # Check for StakeDAO and Beefy flags in JSON config or CLI
+    # Check for StakeDAO, Beefy, and Convex flags in JSON config or CLI
     enable_stakedao = args.stakedao
     enable_beefy = args.beefy
+    enable_convex = args.convex
 
-    # Load JSON file early to check for StakeDAO config
+    # Load JSON file early to check for integration config
     pools_config = None
     if args.pools:
         try:
             with open(args.pools, 'r') as f:
                 pools_config = json.load(f)
-                # Check if JSON has StakeDAO or Beefy config
                 if isinstance(pools_config, dict):
                     if pools_config.get('enable_stakedao'):
                         enable_stakedao = True
                     if pools_config.get('enable_beefy'):
                         enable_beefy = True
+                    if pools_config.get('enable_convex'):
+                        enable_convex = True
                     pools_config = pools_config.get('pools', [])
         except FileNotFoundError:
             print(f"File {args.pools} not found")
@@ -1433,22 +1587,25 @@ def main():
         try:
             with open('pools.json', 'r') as f:
                 pools_config = json.load(f)
-                # Check if JSON has StakeDAO or Beefy config
                 if isinstance(pools_config, dict):
                     if pools_config.get('enable_stakedao'):
                         enable_stakedao = True
                     if pools_config.get('enable_beefy'):
                         enable_beefy = True
+                    if pools_config.get('enable_convex'):
+                        enable_convex = True
                     pools_config = pools_config.get('pools', [])
         except (FileNotFoundError, json.JSONDecodeError):
             pools_config = None
 
-    tracker = CurveTracker(enable_stakedao=enable_stakedao, enable_beefy=enable_beefy)
+    tracker = CurveTracker(enable_stakedao=enable_stakedao, enable_beefy=enable_beefy, enable_convex=enable_convex)
 
     if enable_stakedao:
         print("🚀 StakeDAO integration enabled")
     if enable_beefy:
         print("🥩 Beefy integration enabled")
+    if enable_convex:
+        print("🔷 Convex integration enabled")
     
     if args.pools and pools_config is not None:
         # Use loaded JSON file

@@ -30,6 +30,7 @@ class PoolManager:
             default_config = {
                 "enable_stakedao": True,
                 "enable_beefy": True,
+                "enable_convex": True,
                 "pools": []
             }
             self._save_config(default_config)
@@ -68,6 +69,7 @@ class PoolManager:
         comment: Optional[str] = None,
         stakedao_enabled: Optional[bool] = None,
         beefy_enabled: Optional[bool] = None,
+        convex_enabled: Optional[bool] = None,
         gauge_address: Optional[str] = None,
         stakedao_vault: Optional[str] = None,
         validate: bool = True
@@ -124,6 +126,8 @@ class PoolManager:
             pool_entry["stakedao_enabled"] = stakedao_enabled
         if beefy_enabled is not None:
             pool_entry["beefy_enabled"] = beefy_enabled
+        if convex_enabled is not None:
+            pool_entry["convex_enabled"] = convex_enabled
         if gauge_address:
             pool_entry["gauge_address"] = gauge_address
         if stakedao_vault:
@@ -179,6 +183,7 @@ class PoolManager:
         comment: Optional[str] = None,
         stakedao_enabled: Optional[bool] = None,
         beefy_enabled: Optional[bool] = None,
+        convex_enabled: Optional[bool] = None,
         gauge_address: Optional[str] = None,
         stakedao_vault: Optional[str] = None
     ) -> bool:
@@ -219,6 +224,8 @@ class PoolManager:
                     p['stakedao_enabled'] = stakedao_enabled
                 if beefy_enabled is not None:
                     p['beefy_enabled'] = beefy_enabled
+                if convex_enabled is not None:
+                    p['convex_enabled'] = convex_enabled
                 if gauge_address is not None:
                     p['gauge_address'] = gauge_address
                 if stakedao_vault is not None:
@@ -270,7 +277,8 @@ class PoolManager:
         self,
         chain: Optional[str] = None,
         stakedao_only: bool = False,
-        beefy_only: bool = False
+        beefy_only: bool = False,
+        convex_only: bool = False
     ) -> List[Dict]:
         """
         List all tracked pools with optional filters.
@@ -279,6 +287,7 @@ class PoolManager:
             chain: Filter by specific chain
             stakedao_only: Only show pools with StakeDAO enabled
             beefy_only: Only show pools with Beefy enabled
+            convex_only: Only show pools with Convex enabled
 
         Returns:
             List of pool configuration dicts
@@ -301,6 +310,9 @@ class PoolManager:
 
         if beefy_only:
             pools = [p for p in pools if p.get('beefy_enabled', False)]
+
+        if convex_only:
+            pools = [p for p in pools if p.get('convex_enabled', False)]
 
         return pools
 
@@ -350,7 +362,8 @@ class PoolManager:
     def set_global_integrations(
         self,
         enable_stakedao: Optional[bool] = None,
-        enable_beefy: Optional[bool] = None
+        enable_beefy: Optional[bool] = None,
+        enable_convex: Optional[bool] = None
     ) -> None:
         """
         Set global integration flags.
@@ -358,9 +371,10 @@ class PoolManager:
         Args:
             enable_stakedao: Enable StakeDAO globally
             enable_beefy: Enable Beefy globally
+            enable_convex: Enable Convex globally
 
         Example:
-            manager.set_global_integrations(enable_stakedao=True, enable_beefy=True)
+            manager.set_global_integrations(enable_stakedao=True, enable_beefy=True, enable_convex=True)
         """
         # Create backup before modifying
         self._backup_config()
@@ -372,6 +386,10 @@ class PoolManager:
         if enable_beefy is not None:
             self.config['enable_beefy'] = enable_beefy
             print(f"✅ Global Beefy: {'enabled' if enable_beefy else 'disabled'}")
+
+        if enable_convex is not None:
+            self.config['enable_convex'] = enable_convex
+            print(f"✅ Global Convex: {'enabled' if enable_convex else 'disabled'}")
 
         self._save_config(self.config)
 
@@ -411,6 +429,7 @@ class PoolManager:
                     comment=pool_config.get('comment'),
                     stakedao_enabled=pool_config.get('stakedao_enabled'),
                     beefy_enabled=pool_config.get('beefy_enabled'),
+                    convex_enabled=pool_config.get('convex_enabled'),
                     gauge_address=pool_config.get('gauge_address'),
                     stakedao_vault=pool_config.get('stakedao_vault'),
                     validate=pool_config.get('validate', False)
@@ -508,6 +527,7 @@ class PoolManager:
         chains = set(p['chain'] for p in pools)
         stakedao_enabled = sum(1 for p in pools if p.get('stakedao_enabled', False))
         beefy_enabled = sum(1 for p in pools if p.get('beefy_enabled', False))
+        convex_enabled = sum(1 for p in pools if p.get('convex_enabled', False))
 
         return {
             'total_pools': len(pools),
@@ -518,8 +538,10 @@ class PoolManager:
             },
             'stakedao_enabled_count': stakedao_enabled,
             'beefy_enabled_count': beefy_enabled,
+            'convex_enabled_count': convex_enabled,
             'global_stakedao': self.config.get('enable_stakedao', False),
-            'global_beefy': self.config.get('enable_beefy', False)
+            'global_beefy': self.config.get('enable_beefy', False),
+            'global_convex': self.config.get('enable_convex', False)
         }
 
     def print_stats(self) -> None:
@@ -536,6 +558,8 @@ class PoolManager:
         print(f"\nIntegrations:")
         print(f"  Global StakeDAO: {'✓' if stats['global_stakedao'] else '✗'}")
         print(f"  Global Beefy: {'✓' if stats['global_beefy'] else '✗'}")
+        print(f"  Global Convex: {'✓' if stats['global_convex'] else '✗'}")
         print(f"  Pools with StakeDAO: {stats['stakedao_enabled_count']}")
         print(f"  Pools with Beefy: {stats['beefy_enabled_count']}")
+        print(f"  Pools with Convex: {stats['convex_enabled_count']}")
         print("=" * 50)

@@ -1,6 +1,7 @@
 {
   "enable_stakedao": true,
   "enable_beefy": true,
+  "enable_convex": true,
   "pools": [
     {
       "chain": "ethereum",
@@ -87,7 +88,8 @@
       "pool": "0xE99810Cd5AdCD7b13455aE1BE678B382d61f2d1E",
       "comment": "USD3/scrvUSD",
       "enabled": true,
-      "stakedao_enabled": true
+      "stakedao_enabled": true,
+      "convex_enabled": true
     },
     {
       "chain": "ethereum",
