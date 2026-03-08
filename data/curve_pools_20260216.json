@@ -1,0 +1,87 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "generated_at": "2026-02-16T23:01:00Z",
+    "source": "CurveTracker v1.0",
+    "total_pools": 2,
+    "chains": [
+      "plasma"
+    ],
+    "data_freshness_hours": 1,
+    "integrations": [
+      "Curve"
+    ]
+  },
+  "pools": [
+    {
+      "id": "plasma_usdt_usde",
+      "name": "USDT/USDe",
+      "chain": "plasma",
+      "latest": {
+        "timestamp": "2026-02-16T23:01:00Z",
+        "coins": "USDT / USDe",
+        "coin_ratios": "USDT: 0.0%, USDe: 0.0%",
+        "tvl_usd": "$0.00",
+        "tvl_raw": 0.0,
+        "base_apy": 0,
+        "crv_rewards": {
+          "min": 0.0,
+          "max": 0.0,
+          "range_text": "0.00 - 0.00"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "coin_details": [
+          {
+            "name": "USDT",
+            "amount": 0.0,
+            "price": 1.0
+          },
+          {
+            "name": "USDe",
+            "amount": 0.0,
+            "price": 1.0
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x2d84d79c852f6842abe0304b70bbaa1506add457"
+      }
+    },
+    {
+      "id": "plasma_usdt_susde",
+      "name": "USDT/sUSDe",
+      "chain": "plasma",
+      "latest": {
+        "timestamp": "2026-02-16T23:01:00Z",
+        "coins": "USDT / sUSDe",
+        "coin_ratios": "USDT: 0.0%, sUSDe: 0.0%",
+        "tvl_usd": "$0.00",
+        "tvl_raw": 0.0,
+        "base_apy": 0,
+        "crv_rewards": {
+          "min": 0.0,
+          "max": 0.0,
+          "range_text": "0.00 - 0.00"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "coin_details": [
+          {
+            "name": "USDT",
+            "amount": 0.0,
+            "price": 1.0
+          },
+          {
+            "name": "sUSDe",
+            "amount": 0.0,
+            "price": 1.0
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x1e8d78e9b3f0152d54d32904b7933f1cfe439df1"
+      }
+    }
+  ]
+}
