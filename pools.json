@@ -112,6 +112,18 @@
       "comment": "PYUSD/crvUSD",
       "stakedao_enabled": true,
       "beefy_enabled": false
+    },
+    {
+      "chain": "ethereum",
+      "pool": "0xEfa939F4932cfF8A92fd6A7C5Fe52cD2AD77f3EC",
+      "comment": "OUSD/crvUSD",
+      "stakedao_enabled": true
+    },
+    {
+      "chain": "ethereum",
+      "pool": "0xCF8A5C32953D08C197f0A92676CFb59314b5c62e",
+      "comment": "OUSD/eUSD",
+      "stakedao_enabled": true
     }
   ]
 }
