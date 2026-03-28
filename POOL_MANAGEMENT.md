@@ -567,6 +567,18 @@ manager.add_pool(chain, pool, validate=False)
 
 ### 3. Check Before Adding
 
+Use the standalone lookup script for quick checks from the command line:
+
+```bash
+# Check if a pool is tracked (returns JSON to stdout)
+python3 scripts/check_tracked.py --pool 0xed785Af60bEd688baa8990cD5c4166221599A441 --chain ethereum
+
+# Omit --chain to search all chains
+python3 scripts/check_tracked.py --pool 0xed785Af60bEd688baa8990cD5c4166221599A441
+```
+
+Or use the Python module:
+
 ```python
 if not manager.pool_exists(chain, pool):
     manager.add_pool(chain, pool)

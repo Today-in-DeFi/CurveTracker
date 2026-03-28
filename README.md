@@ -253,6 +253,15 @@ python3 curve_tracker.py --help
 - `--sheet-name`: Spreadsheet name (default: "Curve Pool Tracker")
 - `--replace-data`: Replace data instead of appending
 
+### Check if a Pool is Tracked:
+```bash
+# Returns JSON with tracking status
+python3 scripts/check_tracked.py --pool 0xed785Af60bEd688baa8990cD5c4166221599A441 --chain ethereum
+
+# Omit --chain to search all chains
+python3 scripts/check_tracked.py --pool 0xed785Af60bEd688baa8990cD5c4166221599A441
+```
+
 ### Configuration Priority:
 1. CLI flags (highest priority)
 2. JSON configuration file settings
