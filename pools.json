@@ -124,6 +124,25 @@
       "pool": "0xCF8A5C32953D08C197f0A92676CFb59314b5c62e",
       "comment": "OUSD/eUSD",
       "stakedao_enabled": true
+    },
+    {
+      "chain": "ethereum",
+      "pool": "0x2c683fAd51da2cd17793219CC86439C1875c353e",
+      "comment": "ETH+/WETH",
+      "beefy_enabled": true
+    },
+    {
+      "chain": "ethereum",
+      "pool": "0x4d968a5db8da0822a2f08840f553de4129aae5f3",
+      "comment": "frxscrvUSD (scrvUSD/frxUSD)",
+      "stakedao_enabled": true
+    },
+    {
+      "chain": "ethereum",
+      "pool": "0x964573b560da1ce5b10dd09a4723c5ccbe9f9688",
+      "comment": "USD3/sUSDe",
+      "stakedao_enabled": true,
+      "beefy_enabled": false
     }
   ]
 }
