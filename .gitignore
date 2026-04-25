@@ -50,4 +50,10 @@ Thumbs.db
 *.log
 
 # Cache
-.cache/Google Credentials.json
+.cache/
+
+# Credentials / secrets
+Google Credentials.json
+*credentials*.json
+*.pem
+*.key
