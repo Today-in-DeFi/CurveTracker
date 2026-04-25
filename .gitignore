@@ -57,3 +57,7 @@ Google Credentials.json
 *credentials*.json
 *.pem
 *.key
+
+# Local backups
+*.backup_*
+pools.json.backup_*
