@@ -135,7 +135,8 @@
       "chain": "ethereum",
       "pool": "0x4d968a5db8da0822a2f08840f553de4129aae5f3",
       "comment": "frxscrvUSD (scrvUSD/frxUSD)",
-      "stakedao_enabled": true
+      "stakedao_enabled": true,
+      "convex_enabled": true
     },
     {
       "chain": "ethereum",
