@@ -22,6 +22,13 @@ try:
 except ImportError:
     PLASMA_ONCHAIN_AVAILABLE = False
 
+# Monad on-chain data fetcher
+try:
+    from monad_onchain import get_fetcher as get_monad_fetcher
+    MONAD_ONCHAIN_AVAILABLE = True
+except ImportError:
+    MONAD_ONCHAIN_AVAILABLE = False
+
 # Google Sheets imports (optional)
 try:
     import gspread
@@ -165,7 +172,8 @@ class BeefyAPI:
         'bsc': 56,
         'fantom': 250,
         'avalanche': 43114,
-        'fraxtal': 252
+        'fraxtal': 252,
+        'monad': 143,
     }
 
     def __init__(self):
@@ -314,7 +322,9 @@ class ConvexAPI:
             base = apy_entry.get('baseApy', 0) or 0
             crv = apy_entry.get('crvApy', 0) or 0
             cvx = apy_entry.get('cvxApy', 0) or 0
-            convex_apy = base + crv + cvx
+            # Convex takes 17% platform fee on CRV rewards only
+            crv_after_fee = crv * (1 - 0.17)
+            convex_apy = base + crv_after_fee + cvx
 
         return {
             'apy': convex_apy,
@@ -462,6 +472,35 @@ class CurveTracker:
         # Only return manual data for truly unsupported chains
         # Plasma: Curve deployed Sept 2025, but API doesn't index pools yet
         manual_pools = {
+            'monad': {
+                '0x942644106b073e30d72c2c5d7529d5c296ea91ab': {
+                    'address': '0x942644106b073e30d72c2c5d7529d5c296ea91ab',
+                    'name': 'AUSD/USDC/USDT0 (3pool)',
+                    'coins': [
+                        {
+                            'address': '0x00000000efe302beaa2b3e6e1b18d08d69a9012a',
+                            'symbol': 'AUSD',
+                            'decimals': 6,
+                            'poolBalance': 0,
+                            'usdPrice': 1.0,
+                        },
+                        {
+                            'address': '0x754704bc059f8c67012fed69bc8a327a5aafb603',
+                            'symbol': 'USDC',
+                            'decimals': 6,
+                            'poolBalance': 0,
+                            'usdPrice': 1.0,
+                        },
+                        {
+                            'address': '0xe7cd86e13ac4309349f30b3435a9d337750fc82d',
+                            'symbol': 'USDT0',
+                            'decimals': 6,
+                            'poolBalance': 0,
+                            'usdPrice': 1.0,
+                        },
+                    ],
+                },
+            },
             'plasma': {
                 '0x2d84d79c852f6842abe0304b70bbaa1506add457': {
                     'address': '0x2d84d79c852f6842abe0304b70bbaa1506add457',
@@ -580,6 +619,19 @@ class CurveTracker:
                         coin['poolBalance'] = onchain_data['coin_amounts'][i]
             except Exception as e:
                 print(f"Warning: Failed to fetch on-chain data for Plasma pool: {e}")
+
+        # Fetch on-chain data for Monad pools
+        if chain.lower() == 'monad' and MONAD_ONCHAIN_AVAILABLE and 'coins' in pool:
+            try:
+                fetcher = get_monad_fetcher()
+                tokens = [{'symbol': coin['symbol'], 'decimals': coin['decimals']} for coin in pool['coins']]
+                onchain_data = fetcher.get_pool_data(pool_address, tokens)
+                tvl = onchain_data['tvl']
+                for i, coin in enumerate(pool['coins']):
+                    if i < len(onchain_data['balances']):
+                        coin['poolBalance'] = onchain_data['coin_amounts'][i]
+            except Exception as e:
+                print(f"Warning: Failed to fetch on-chain data for Monad pool: {e}")
 
         # If no TVL from volume API, calculate from pool balances
         if tvl == 0 and 'coins' in pool:

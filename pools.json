@@ -70,6 +70,14 @@
       "beefy_enabled": true
     },
     {
+      "chain": "monad",
+      "pool": "0x942644106b073e30d72c2c5d7529d5c296ea91ab",
+      "comment": "AUSD/USDC/USDT0 3pool (Beefy mooCurve-3pool underlying)",
+      "stakedao_enabled": false,
+      "convex_enabled": false,
+      "beefy_enabled": true
+    },
+    {
       "chain": "plasma",
       "pool": "0x2d84d79c852f6842abe0304b70bbaa1506add457",
       "comment": "USDT/USDe (Lagoon wallet)",
