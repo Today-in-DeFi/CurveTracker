@@ -245,13 +245,16 @@ class CurveDataExporter:
         Returns:
             Tuple of (min_apy, max_apy)
         """
-        # Check if it's a list [min, max]
+        # Check if it's a list [min, max] — filter Nones (Curve gauge API can return [None, None])
         if isinstance(crv_rewards_apy, list):
-            if len(crv_rewards_apy) >= 2:
-                return float(crv_rewards_apy[0]), float(crv_rewards_apy[1])
-            elif len(crv_rewards_apy) == 1:
-                val = float(crv_rewards_apy[0])
+            numeric_vals = [v for v in crv_rewards_apy if isinstance(v, (int, float))]
+            if len(numeric_vals) >= 2:
+                return float(numeric_vals[0]), float(numeric_vals[1])
+            elif len(numeric_vals) == 1:
+                val = float(numeric_vals[0])
                 return val, val
+            else:
+                return 0.0, 0.0
 
         # Check if it's already a string range like "6.07 - 15.18"
         if isinstance(crv_rewards_apy, str):

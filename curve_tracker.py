@@ -1400,12 +1400,16 @@ def print_results(pool_data_list: List[PoolData]):
     rows = []
     for pool in pool_data_list:
         # Format CRV rewards as range if it's a list, otherwise as single value
-        if isinstance(pool.crv_rewards_apy, list) and len(pool.crv_rewards_apy) >= 2:
-            crv_rewards_str = f"{pool.crv_rewards_apy[0]:.2f} - {pool.crv_rewards_apy[1]:.2f}"
-        elif isinstance(pool.crv_rewards_apy, list) and len(pool.crv_rewards_apy) == 1:
-            crv_rewards_str = f"{pool.crv_rewards_apy[0]:.2f}"
-        elif isinstance(pool.crv_rewards_apy, (int, float)) and pool.crv_rewards_apy > 0:
-            crv_rewards_str = f"{pool.crv_rewards_apy:.2f}"
+        # Curve API can return [None, None] when gauge data is missing — filter those out
+        crv_vals = pool.crv_rewards_apy
+        if isinstance(crv_vals, list):
+            crv_vals = [v for v in crv_vals if isinstance(v, (int, float))]
+        if isinstance(crv_vals, list) and len(crv_vals) >= 2:
+            crv_rewards_str = f"{crv_vals[0]:.2f} - {crv_vals[1]:.2f}"
+        elif isinstance(crv_vals, list) and len(crv_vals) == 1:
+            crv_rewards_str = f"{crv_vals[0]:.2f}"
+        elif isinstance(crv_vals, (int, float)) and crv_vals > 0:
+            crv_rewards_str = f"{crv_vals:.2f}"
         else:
             crv_rewards_str = "0.00"
         
