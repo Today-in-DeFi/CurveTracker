@@ -152,6 +152,20 @@
       "comment": "USD3/sUSDe",
       "stakedao_enabled": true,
       "beefy_enabled": false
+    },
+    {
+      "chain": "ethereum",
+      "pool": "0x59ab5a5b5d617e478a2479b0cad80da7e2831492",
+      "comment": "ETH/ETHx (Stader)",
+      "stakedao_enabled": true,
+      "beefy_enabled": false
+    },
+    {
+      "chain": "ethereum",
+      "pool": "0x5b03cccab7ba3010fa5cad23746cbf0794938e96",
+      "comment": "USDT/USDe",
+      "stakedao_enabled": true,
+      "beefy_enabled": false
     }
   ]
 }
