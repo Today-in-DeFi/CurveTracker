@@ -70,6 +70,13 @@
       "beefy_enabled": true
     },
     {
+      "chain": "fraxtal",
+      "pool": "0x63Eb7846642630456707C3efBb50A03c79B89D81",
+      "comment": "crvUSD/frxUSD",
+      "stakedao_enabled": false,
+      "beefy_enabled": true
+    },
+    {
       "chain": "monad",
       "pool": "0x942644106b073e30d72c2c5d7529d5c296ea91ab",
       "comment": "AUSD/USDC/USDT0 3pool (Beefy mooCurve-3pool underlying)",
