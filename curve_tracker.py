@@ -63,7 +63,8 @@ class PoolData:
     stakedao_apy: Optional[float] = None
     stakedao_tvl: Optional[float] = None
     stakedao_boost: Optional[float] = None
-    stakedao_fees: Optional[str] = None
+    # Platform fee as a percentage (e.g. 16.5), derived not reported.
+    stakedao_fees: Optional[float] = None
     # Beefy fields
     beefy_apy: Optional[float] = None
     beefy_boost: Optional[float] = None
@@ -461,6 +462,37 @@ class CurveTracker:
 
         return self._stakedao_cache[chain_id][pool_address]
 
+    @staticmethod
+    def _derive_stakedao_fee(stakedao_data: Dict) -> Optional[float]:
+        """Derive StakeDAO's platform fee (%) from the gap between the gross
+        Curve gauge range and the net CRV APR StakeDAO reports.
+
+        Returns None when the inputs can't support the division, rather than a
+        misleading 0 - a pool with no CRV emissions tells us nothing about fees.
+        """
+        apr_data = stakedao_data.get('apr') or {}
+        boost = apr_data.get('boost')
+        min_apr = stakedao_data.get('minApr')
+        if not boost or not min_apr:
+            return None
+
+        net_crv = None
+        for detail in (apr_data.get('current') or {}).get('details', []):
+            if 'CRV APR' in detail.get('label', ''):
+                values = detail.get('value') or []
+                if values:
+                    net_crv = values[0]
+
+        gross_crv = min_apr * boost
+        if net_crv is None or gross_crv <= 0:
+            return None
+
+        fee_pct = (1 - net_crv / gross_crv) * 100
+        # Guard against noise on near-zero emissions producing absurd rates.
+        if not 0 <= fee_pct < 100:
+            return None
+        return round(fee_pct, 2)
+
     def _get_manual_stakedao_data(self, chain: str, pool_address: str) -> Dict:
         """Get manually configured StakeDAO data for pools not in API"""
         # No manual StakeDAO data - only use real API data
@@ -741,16 +773,15 @@ class CurveTracker:
                 # Extract boost
                 stakedao_boost = apr_data.get('boost')
 
-                # Extract fees (basic implementation)
-                fee_parts = []
-                if 'fees' in stakedao_data:
-                    fees = stakedao_data['fees']
-                    if isinstance(fees, dict):
-                        for fee_type, fee_value in fees.items():
-                            if isinstance(fee_value, (int, float)) and fee_value > 0:
-                                fee_parts.append(f"{fee_type}: {fee_value:.2f}%")
-                if fee_parts:
-                    stakedao_fees = ", ".join(fee_parts)
+                # The StakeDAO API exposes no 'fees' key, so derive the platform
+                # fee instead. Reported CRV APR is already NET of it, while
+                # minApr/maxApr are the gross Curve gauge range, so the fee
+                # falls out of the gap: 1 - reported / (minApr * boost).
+                # Empirically a flat 16.5% across every pool, but derived
+                # rather than hardcoded so a change upstream shows up here.
+                # This matters for comparison: our Convex APY is likewise net
+                # (we deduct Convex's 17%), so the two are like-for-like.
+                stakedao_fees = self._derive_stakedao_fee(stakedao_data)
 
                 # If Curve gauge data doesn't have other rewards, check StakeDAO rewards
                 if not other_rewards and 'rewards' in stakedao_data:
