@@ -432,8 +432,14 @@ class ConvexAPI(JSONAPIClient):
 
 
 class CurveTracker:
-    def __init__(self, enable_stakedao: bool = False, enable_beefy: bool = False, enable_convex: bool = False):
+    def __init__(self, enable_stakedao: bool = False, enable_beefy: bool = False,
+                 enable_convex: bool = False, enable_gauge_rpc: bool = True):
         self.api = CurveAPI()
+        # On-chain reward expiry. Default-on: absence of period_finish should
+        # mean "no such stream", not "nobody enabled the lookup".
+        self.enable_gauge_rpc = enable_gauge_rpc
+        self._gauge_rpc_degraded = False
+        self._reward_data_cache = {}
         self.stakedao_api = StakeDAOAPI() if enable_stakedao else None
         self.beefy_api = BeefyAPI() if enable_beefy else None
         self.convex_api = ConvexAPI() if enable_convex else None
@@ -444,6 +450,61 @@ class CurveTracker:
         self._stakedao_cache = {}
         self._beefy_cache = {}
         self._convex_cache = {}
+
+    def _enrich_rewards_with_expiry(self, chain: str, rewards: List[Dict]) -> List[Dict]:
+        """Attach on-chain period_finish/rate to each gauge reward stream.
+
+        Curve's API gives the APY but not the expiry, so a stream ending
+        tomorrow looks identical to one funded for a year. Reading
+        reward_data() on the gauge closes that gap, and lets `active` reflect
+        the actual expiry rather than the apy > 0 proxy.
+
+        A failed read leaves the fields absent and marks the run degraded. It
+        never writes a placeholder: a zeroed period_finish would read as
+        "expired in 1970" and a zeroed rate as "stream is dead".
+        """
+        if not self.enable_gauge_rpc or not rewards:
+            return rewards
+
+        # Gauges on other chains live behind their own RPCs; only Ethereum is
+        # wired up, and guessing would produce wrong data rather than none.
+        if chain.lower() != 'ethereum':
+            return rewards
+
+        from ethereum_onchain import RPCError, get_rpc
+
+        rpc = get_rpc()
+        for reward in rewards:
+            gauge = reward.get('gauge_address')
+            token = reward.get('token_address')
+            if not gauge or not token:
+                continue
+
+            key = (gauge.lower(), token.lower())
+            if key not in self._reward_data_cache:
+                try:
+                    self._reward_data_cache[key] = rpc.get_reward_data(gauge, token)
+                except RPCError as e:
+                    print(f"⚠️  Gauge reward read failed for {reward['token']}: {e}")
+                    self._gauge_rpc_degraded = True
+                    self._reward_data_cache[key] = None
+
+            data = self._reward_data_cache[key]
+            if not data:
+                continue
+
+            reward['period_finish'] = data['period_finish']
+            reward['period_finish_iso'] = data['period_finish_iso']
+            reward['distributor'] = data['distributor']
+            # On-chain expiry supersedes the apy > 0 proxy.
+            reward['active'] = data['active']
+            reward['active_source'] = 'period_finish'
+            # An expired stream's rate is whatever it was when last funded;
+            # publishing it as a live rate would overstate a dead stream.
+            if data['active']:
+                reward['rate_per_year'] = data['rate_per_year']
+
+        return rewards
 
     def degraded_sources(self) -> List[str]:
         """Names of upstream APIs that failed at least one request this run.
@@ -458,7 +519,13 @@ class CurveTracker:
             "Beefy": self.beefy_api,
             "Convex": self.convex_api,
         }
-        return [name for name, client in clients.items() if client and client.degraded]
+        degraded = [name for name, client in clients.items()
+                    if client and client.degraded]
+        # Not a JSONAPIClient, so it carries its own flag. A failed gauge read
+        # means period_finish is absent, not that the stream never expires.
+        if self._gauge_rpc_degraded:
+            degraded.append("EthereumRPC")
+        return degraded
 
 
     def _load_chain_data(self, chain: str):
@@ -811,7 +878,8 @@ class CurveTracker:
 
         # Curve's own gauge incentives are the primary source. StakeDAO is
         # only a fallback below, for pools Curve does not report.
-        other_rewards = parse_gauge_rewards(pool)
+        other_rewards = self._enrich_rewards_with_expiry(
+            chain, parse_gauge_rewards(pool))
 
         if gauge_data:
             # Current rate, with the next-period projection kept separate
@@ -1745,6 +1813,10 @@ def main():
     parser.add_argument('--convex', action=argparse.BooleanOptionalAction,
                        default=None, help='Enable Convex data fetching')
 
+    parser.add_argument('--gauge-rpc', action=argparse.BooleanOptionalAction,
+                       default=True,
+                       help='Read reward stream expiry on-chain (default: on)')
+
     # Google Sheets arguments
     parser.add_argument('--export-sheets', action='store_true',
                        help='Export results to Google Sheets')
@@ -1890,7 +1962,8 @@ def main():
         except (FileNotFoundError, json.JSONDecodeError):
             pools_config = None
 
-    tracker = CurveTracker(enable_stakedao=enable_stakedao, enable_beefy=enable_beefy, enable_convex=enable_convex)
+    tracker = CurveTracker(enable_stakedao=enable_stakedao, enable_beefy=enable_beefy,
+                           enable_convex=enable_convex, enable_gauge_rpc=args.gauge_rpc)
 
     if enable_stakedao:
         print("🚀 StakeDAO integration enabled")

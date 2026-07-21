@@ -378,13 +378,17 @@ class CurveDataExporter:
             entry = {
                 "token": reward["token"],
                 "apy": round(reward["apy"], 2),
-                # Derived from apy > 0, not from the gauge's period_finish --
-                # an expired stream and a momentarily-zero one look the same
-                # here. Kept rather than dropped so consumers can distinguish
-                # "incentive ended" from "never had one".
+                # Check active_source to know how this was determined:
+                # "period_finish" means an authoritative on-chain expiry;
+                # absent means it fell back to the apy > 0 proxy, which cannot
+                # tell a lapsed stream from a momentarily-zero one. Streams are
+                # kept rather than dropped either way, so consumers can
+                # distinguish "incentive ended" from "never had one".
                 "active": reward.get("active", True),
             }
-            for optional in ("token_address", "gauge_address", "source"):
+            for optional in ("token_address", "gauge_address", "source",
+                             "period_finish", "period_finish_iso",
+                             "rate_per_year", "distributor", "active_source"):
                 if reward.get(optional):
                     entry[optional] = reward[optional]
             formatted.append(entry)
