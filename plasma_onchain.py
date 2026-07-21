@@ -3,77 +3,84 @@ Plasma Chain On-Chain Data Fetcher for Curve Pools
 
 Fetches real-time pool data directly from Plasma blockchain RPC
 since Curve API doesn't index Plasma pools yet.
+
+Reads fail loudly: see onchain_rpc. A dropped eth_call used to become a
+balance of zero, which silently dropped one leg out of a pool's TVL while
+leaving the result non-zero and therefore unrejectable downstream.
 """
 
-import requests
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional
+
+from onchain_rpc import JSONRPCClient, RPCError
+
+RPC_URLS = ('https://rpc.plasma.to',)
 
 
 class PlasmaOnChainFetcher:
     """Fetch Curve pool data from Plasma chain via RPC"""
-    
-    RPC_URL = 'https://rpc.plasma.to'
-    
+
+    RPC_URL = RPC_URLS[0]
+
     # Curve pool ABI function signatures
     BALANCES_SIGNATURE = '0x4903b0d1'  # balances(uint256)
     COINS_SIGNATURE = '0xc6610657'     # coins(uint256)
-    
-    def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({'Content-Type': 'application/json'})
-    
-    def _rpc_call(self, to: str, data: str) -> str:
-        """Make JSON-RPC call to Plasma"""
-        payload = {
-            'jsonrpc': '2.0',
-            'method': 'eth_call',
-            'params': [{'to': to, 'data': data}, 'latest'],
-            'id': 1
-        }
-        try:
-            response = self.session.post(self.RPC_URL, json=payload, timeout=10)
-            response.raise_for_status()
-            result = response.json()
-            return result.get('result', '0x0')
-        except Exception as e:
-            print(f"RPC call failed: {e}")
-            return '0x0'
-    
+
+    def __init__(self, rpc_urls: Optional[List[str]] = None):
+        self.client = JSONRPCClient(rpc_urls or RPC_URLS, label="Plasma")
+
+    @property
+    def session(self):
+        """Kept for callers that reached into the old attribute."""
+        return self.client.session
+
     def get_token_balance(self, pool_address: str, token_index: int) -> int:
-        """Get balance of token at index in pool"""
+        """Balance of the token at index. Raises RPCError if unreadable."""
         data = self.BALANCES_SIGNATURE + format(token_index, '064x')
-        result = self._rpc_call(pool_address, data)
-        return int(result, 16)
-    
+        return self.client.call_uint(pool_address, data)
+
     def get_coin_address(self, pool_address: str, token_index: int) -> str:
-        """Get address of coin at index in pool"""
+        """Address of the coin at index. Raises RPCError if unreadable."""
         data = self.COINS_SIGNATURE + format(token_index, '064x')
-        result = self._rpc_call(pool_address, data)
-        # Extract address from padded result
-        return '0x' + result[-40:]
-    
+        return self.client.call_address(pool_address, data)
+
     def get_pool_data(self, pool_address: str, tokens: List[Dict]) -> Dict:
         """
-        Get pool TVL and balances
-        
+        Get pool TVL and balances.
+
+        Every leg must be read successfully. A partial result is refused
+        rather than returned, because a TVL missing one token still looks
+        like a plausible TVL -- there is no way for a caller to tell.
+
         Args:
             pool_address: Pool contract address
             tokens: List of token configs with 'symbol' and 'decimals'
-        
+
         Returns:
             Dict with tvl, balances, and coin_amounts
+
+        Raises:
+            RPCError: if any leg could not be read.
         """
-        pool_tvl = 0
         balances = []
         coin_amounts = []
-        
+
         for i, token in enumerate(tokens):
-            balance_raw = self.get_token_balance(pool_address, i)
+            try:
+                balance_raw = self.get_token_balance(pool_address, i)
+            except RPCError as e:
+                raise RPCError(
+                    f"Plasma pool {pool_address}: could not read balance for "
+                    f"{token.get('symbol', f'token {i}')} -- refusing to report "
+                    f"a TVL missing this leg ({e})")
+
             balance = balance_raw / (10 ** token['decimals'])
             balances.append(balance)
             coin_amounts.append(balance_raw)
-            pool_tvl += balance
-        
+
+        # NOTE: this sums token *amounts*, not USD value, so it is only
+        # correct while every token trades at ~$1. Tracked separately.
+        pool_tvl = sum(balances)
+
         return {
             'tvl': pool_tvl,
             'balances': balances,
@@ -95,7 +102,7 @@ def get_fetcher() -> PlasmaOnChainFetcher:
 if __name__ == '__main__':
     # Test the fetcher
     fetcher = get_fetcher()
-    
+
     pools = [
         {
             'name': 'USDT/USDe',
@@ -114,10 +121,10 @@ if __name__ == '__main__':
             ]
         }
     ]
-    
+
     print("Testing Plasma On-Chain Fetcher")
     print("=" * 60)
-    
+
     for pool in pools:
         data = fetcher.get_pool_data(pool['address'], pool['tokens'])
         print(f"\n{pool['name']}:")

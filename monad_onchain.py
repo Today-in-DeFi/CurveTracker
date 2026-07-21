@@ -3,74 +3,86 @@ Monad Chain On-Chain Data Fetcher for Curve Pools
 
 Fetches real-time pool data directly from Monad blockchain RPC
 since Curve API doesn't index Monad pools yet.
+
+Reads fail loudly: see onchain_rpc. A dropped eth_call used to become a
+balance of zero, which silently dropped one leg out of a pool's TVL while
+leaving the result non-zero and therefore unrejectable downstream.
 """
 
-import requests
-from typing import Dict, List
+from typing import Dict, List, Optional
+
+from onchain_rpc import JSONRPCClient, RPCError
+
+RPC_URLS = ('https://rpc.monad.xyz',)
 
 
 class MonadOnChainFetcher:
     """Fetch Curve pool data from Monad chain via RPC"""
 
-    RPC_URL = 'https://rpc.monad.xyz'
+    RPC_URL = RPC_URLS[0]
 
     # Curve pool ABI function signatures
     BALANCES_SIGNATURE = '0x4903b0d1'  # balances(uint256)
     COINS_SIGNATURE = '0xc6610657'     # coins(uint256)
     VIRTUAL_PRICE_SIGNATURE = '0xbb7b8b80'  # get_virtual_price()
 
-    def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({'Content-Type': 'application/json'})
+    def __init__(self, rpc_urls: Optional[List[str]] = None):
+        self.client = JSONRPCClient(rpc_urls or RPC_URLS, label="Monad")
 
-    def _rpc_call(self, to: str, data: str) -> str:
-        payload = {
-            'jsonrpc': '2.0',
-            'method': 'eth_call',
-            'params': [{'to': to, 'data': data}, 'latest'],
-            'id': 1,
-        }
-        try:
-            response = self.session.post(self.RPC_URL, json=payload, timeout=10)
-            response.raise_for_status()
-            result = response.json()
-            return result.get('result', '0x0')
-        except Exception as e:
-            print(f"RPC call failed: {e}")
-            return '0x0'
+    @property
+    def session(self):
+        """Kept for callers that reached into the old attribute."""
+        return self.client.session
 
     def get_token_balance(self, pool_address: str, token_index: int) -> int:
+        """Balance of the token at index. Raises RPCError if unreadable."""
         data = self.BALANCES_SIGNATURE + format(token_index, '064x')
-        result = self._rpc_call(pool_address, data)
-        return int(result, 16)
+        return self.client.call_uint(pool_address, data)
 
     def get_coin_address(self, pool_address: str, token_index: int) -> str:
+        """Address of the coin at index. Raises RPCError if unreadable."""
         data = self.COINS_SIGNATURE + format(token_index, '064x')
-        result = self._rpc_call(pool_address, data)
-        return '0x' + result[-40:]
+        return self.client.call_address(pool_address, data)
 
     def get_virtual_price(self, pool_address: str) -> float:
-        result = self._rpc_call(pool_address, self.VIRTUAL_PRICE_SIGNATURE)
-        return int(result, 16) / 1e18
+        """Pool virtual price. Raises RPCError if unreadable."""
+        return self.client.call_uint(
+            pool_address, self.VIRTUAL_PRICE_SIGNATURE) / 1e18
 
     def get_pool_data(self, pool_address: str, tokens: List[Dict]) -> Dict:
         """
         Get pool TVL, balances, and virtual price.
 
+        Every leg must be read successfully. A partial result is refused
+        rather than returned, because a TVL missing one token still looks
+        like a plausible TVL -- there is no way for a caller to tell.
+
         Args:
             pool_address: Pool contract address
             tokens: List of token configs with 'symbol' and 'decimals'
+
+        Raises:
+            RPCError: if any leg, or the virtual price, could not be read.
         """
-        pool_tvl = 0.0
         balances = []
         coin_amounts = []
 
         for i, token in enumerate(tokens):
-            balance_raw = self.get_token_balance(pool_address, i)
+            try:
+                balance_raw = self.get_token_balance(pool_address, i)
+            except RPCError as e:
+                raise RPCError(
+                    f"Monad pool {pool_address}: could not read balance for "
+                    f"{token.get('symbol', f'token {i}')} -- refusing to report "
+                    f"a TVL missing this leg ({e})")
+
             balance = balance_raw / (10 ** token['decimals'])
             balances.append(balance)
             coin_amounts.append(balance_raw)
-            pool_tvl += balance
+
+        # NOTE: this sums token *amounts*, not USD value, so it is only
+        # correct while every token trades at ~$1. Tracked separately.
+        pool_tvl = sum(balances)
 
         return {
             'tvl': pool_tvl,

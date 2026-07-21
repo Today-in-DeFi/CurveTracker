@@ -17,7 +17,7 @@ import os
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-import requests
+from onchain_rpc import JSONRPCClient, RPCError  # noqa: F401  (re-exported)
 
 # keccak("reward_data(address)")[:4]. Hardcoded rather than derived so the
 # module needs no eth_utils/web3 dependency; verified live against gauge
@@ -42,62 +42,32 @@ DEFAULT_RPC_URLS = (
 REQUEST_TIMEOUT = 15
 
 
-class RPCError(RuntimeError):
-    """An on-chain read did not complete. Never carries a substitute value."""
-
-
 class EthereumRPC:
-    """Minimal eth_call client for gauge reward reads."""
+    """Gauge reward reads over the shared fail-loud JSON-RPC client."""
 
     def __init__(self, rpc_urls: Optional[List[str]] = None):
         configured = os.getenv('ETHEREUM_RPC_URL')
         if rpc_urls:
-            self.rpc_urls = list(rpc_urls)
+            urls = list(rpc_urls)
         elif configured:
             # An explicitly configured endpoint is tried first, but the public
             # fallbacks stay in play so one bad key doesn't lose every stream.
-            self.rpc_urls = [configured] + list(DEFAULT_RPC_URLS)
+            urls = [configured] + list(DEFAULT_RPC_URLS)
         else:
-            self.rpc_urls = list(DEFAULT_RPC_URLS)
+            urls = list(DEFAULT_RPC_URLS)
 
-        self.session = requests.Session()
-        self.session.headers.update({'Content-Type': 'application/json'})
+        self.rpc_urls = urls
+        self.client = JSONRPCClient(urls, timeout=REQUEST_TIMEOUT,
+                                    label="Ethereum")
+
+    @property
+    def session(self):
+        """Kept so tests and callers can patch transport in one place."""
+        return self.client.session
 
     def _rpc_call(self, to: str, data: str) -> str:
         """eth_call, returning raw hex. Raises RPCError if no endpoint answers."""
-        payload = {
-            'jsonrpc': '2.0',
-            'method': 'eth_call',
-            'params': [{'to': to, 'data': data}, 'latest'],
-            'id': 1,
-        }
-
-        errors = []
-        for url in self.rpc_urls:
-            try:
-                response = self.session.post(url, json=payload,
-                                             timeout=REQUEST_TIMEOUT)
-                response.raise_for_status()
-                body = response.json()
-            except Exception as e:
-                errors.append(f"{url}: {e}")
-                continue
-
-            if 'error' in body:
-                errors.append(f"{url}: {body['error']}")
-                continue
-
-            result = body.get('result')
-            if not result or result == '0x':
-                # An empty return means the call reverted or the contract has
-                # no such method -- not a stream with zero values.
-                errors.append(f"{url}: empty result")
-                continue
-
-            return result
-
-        raise RPCError(f"eth_call to {to} failed on all endpoints: "
-                       f"{'; '.join(errors)}")
+        return self.client.call(to, data)
 
     def get_reward_data(self, gauge_address: str, token_address: str) -> Dict:
         """Read one reward stream's expiry and rate from the gauge.

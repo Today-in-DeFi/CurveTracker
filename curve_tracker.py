@@ -440,6 +440,8 @@ class CurveTracker:
         self.enable_gauge_rpc = enable_gauge_rpc
         self._gauge_rpc_degraded = False
         self._reward_data_cache = {}
+        # Chain RPCs that failed a read this run (Plasma/Monad).
+        self._onchain_degraded = set()
         self.stakedao_api = StakeDAOAPI() if enable_stakedao else None
         self.beefy_api = BeefyAPI() if enable_beefy else None
         self.convex_api = ConvexAPI() if enable_convex else None
@@ -525,6 +527,8 @@ class CurveTracker:
         # means period_finish is absent, not that the stream never expires.
         if self._gauge_rpc_degraded:
             degraded.append("EthereumRPC")
+        # A failed chain read means a pool's TVL is missing a leg, not zero.
+        degraded.extend(sorted(self._onchain_degraded))
         return degraded
 
 
@@ -845,7 +849,12 @@ class CurveTracker:
                     if i < len(onchain_data['balances']):
                         coin['poolBalance'] = onchain_data['coin_amounts'][i]
             except Exception as e:
+                # Reachable since plasma_onchain stopped returning '0x0' on
+                # failure. TVL stays 0 here, which the sanity gate rejects
+                # rather than persisting -- but the run must also be marked
+                # degraded so cron sees a non-zero exit.
                 print(f"Warning: Failed to fetch on-chain data for Plasma pool: {e}")
+                self._onchain_degraded.add("PlasmaRPC")
 
         # Fetch on-chain data for Monad pools
         if chain.lower() == 'monad' and MONAD_ONCHAIN_AVAILABLE and 'coins' in pool:
@@ -858,7 +867,9 @@ class CurveTracker:
                     if i < len(onchain_data['balances']):
                         coin['poolBalance'] = onchain_data['coin_amounts'][i]
             except Exception as e:
+                # See the Plasma branch above -- same reasoning.
                 print(f"Warning: Failed to fetch on-chain data for Monad pool: {e}")
+                self._onchain_degraded.add("MonadRPC")
 
         # If no TVL from volume API, calculate from pool balances
         if tvl == 0 and 'coins' in pool:
