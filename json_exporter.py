@@ -388,14 +388,18 @@ class CurveDataExporter:
 
             # Create pool entry if doesn't exist
             if pool_id not in history["pools"]:
-                history["pools"][pool_id] = {
-                    "metadata": {
-                        "name": pool.name,
-                        "chain": pool.chain,
-                        "address": pool.address
-                    },
-                    "snapshots": []
-                }
+                history["pools"][pool_id] = {"metadata": {}, "snapshots": []}
+
+            # Refresh metadata every run, not just on creation, so a pool
+            # renamed upstream doesn't stay stale for the life of the file.
+            history["pools"][pool_id]["metadata"] = {
+                "name": pool.name,
+                "chain": pool.chain,
+                # pool_address matches curve_pools_latest.json; address is
+                # kept as a legacy alias for existing readers.
+                "pool_address": pool.address,
+                "address": pool.address
+            }
 
             # Parse CRV rewards
             crv_min, crv_max = self._parse_crv_rewards(pool.crv_rewards_apy)
