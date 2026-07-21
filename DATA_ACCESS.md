@@ -44,7 +44,8 @@ The JSON file contains:
     "total_pools": 5,
     "chains": ["ethereum", "fraxtal"],
     "data_freshness_hours": 1,
-    "integrations": ["Curve", "StakeDAO", "Beefy"]
+    "integrations": ["Curve", "StakeDAO", "Beefy"],
+    "degraded_sources": []
   },
   "pools": [ /* pool array */ ]
 }
@@ -118,6 +119,7 @@ The JSON file contains:
 | `chains` | array | List of blockchain networks |
 | `data_freshness_hours` | integer | Update frequency (1 = hourly) |
 | `integrations` | array | Active data integrations |
+| `degraded_sources` | array | Upstream APIs that failed this run. Empty = clean run. Non-empty means fields sourced from those APIs may be absent or stale rather than genuinely zero — treat them as unknown, not as data. |
 
 ### Pool Object
 

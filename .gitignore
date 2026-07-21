@@ -51,6 +51,7 @@ Thumbs.db
 
 # Cache
 .cache/
+.pytest_cache/
 
 # Credentials / secrets
 Google Credentials.json
