@@ -1,0 +1,1052 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "generated_at": "2026-07-01T23:00:55Z",
+    "source": "CurveTracker v1.0",
+    "total_pools": 23,
+    "chains": [
+      "ethereum",
+      "fraxtal",
+      "monad",
+      "plasma"
+    ],
+    "data_freshness_hours": 1,
+    "integrations": [
+      "Curve",
+      "StakeDAO",
+      "Beefy",
+      "Convex"
+    ]
+  },
+  "pools": [
+    {
+      "id": "ethereum_curve_strategic_ethena_reserves",
+      "name": "Curve Strategic Ethena Reserves",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "USDT / USDe",
+        "coin_ratios": "USDT: 16.6%, USDe: 83.4%",
+        "tvl_usd": "$419.92K",
+        "tvl_raw": 419919.55,
+        "base_apy": 1.35,
+        "crv_rewards": {
+          "min": 4.14,
+          "max": 10.35,
+          "range_text": "4.14 - 10.35"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "stakedao": {
+          "apy": 9.33,
+          "tvl": 296498.64,
+          "boost": 1.68,
+          "fees": null
+        },
+        "stakedao_vault_apy": 9.33,
+        "stakedao_tvl": 296498.64,
+        "stakedao_boost": 1.68,
+        "coin_details": [
+          {
+            "name": "USDT",
+            "amount": 69781.93,
+            "price": 0.9993
+          },
+          {
+            "name": "USDe",
+            "amount": 350696.19,
+            "price": 0.9986
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x5B03CcCAb7BA3010fA5CAd23746cbf0794938e96"
+      }
+    },
+    {
+      "id": "ethereum_curve.fi_factory_pool:_ethx_eth",
+      "name": "Curve.fi Factory Pool: ETHx-ETH",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "ETH / ETHx",
+        "coin_ratios": "ETH: 29.1%, ETHx: 70.9%",
+        "tvl_usd": "$1.27M",
+        "tvl_raw": 1270372.09,
+        "base_apy": 1.71,
+        "crv_rewards": {
+          "min": 2.51,
+          "max": 6.27,
+          "range_text": "2.51 - 6.27"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "stakedao": {
+          "apy": 7.14,
+          "tvl": 241237.96,
+          "boost": 2.5,
+          "fees": null
+        },
+        "stakedao_vault_apy": 7.14,
+        "stakedao_tvl": 241237.96,
+        "stakedao_boost": 2.5,
+        "coin_details": [
+          {
+            "name": "ETH",
+            "amount": 227.18,
+            "price": 1624.8624
+          },
+          {
+            "name": "ETHx",
+            "amount": 508.2,
+            "price": 1773.39
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x59Ab5a5b5d617E478a2479B0cAD80DA7e2831492"
+      }
+    },
+    {
+      "id": "ethereum_eth+_eth",
+      "name": "ETH+/ETH",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "ETH+ / WETH",
+        "coin_ratios": "ETH+: 48.7%, WETH: 51.3%",
+        "tvl_usd": "$9.10M",
+        "tvl_raw": 9098610.74,
+        "base_apy": 5.97,
+        "crv_rewards": {
+          "min": 0.0,
+          "max": 0.0,
+          "range_text": "0.00 - 0.00"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "beefy": {
+          "apy": 11.79,
+          "tvl": 5353435.36,
+          "vault_id": "curve-eth+-weth"
+        },
+        "beefy_apy": 11.79,
+        "beefy_tvl": 5353435.36,
+        "coin_details": [
+          {
+            "name": "ETH+",
+            "amount": 2505.7,
+            "price": 1767.1578
+          },
+          {
+            "name": "WETH",
+            "amount": 2876.45,
+            "price": 1623.7532
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x2c683fAd51da2cd17793219CC86439C1875c353e"
+      }
+    },
+    {
+      "id": "ethereum_gho_crvusd",
+      "name": "GHO/crvUSD",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "GHO / crvUSD",
+        "coin_ratios": "GHO: 74.8%, crvUSD: 25.2%",
+        "tvl_usd": "$821.86K",
+        "tvl_raw": 821860.01,
+        "base_apy": 0.7,
+        "crv_rewards": {
+          "min": 0.01,
+          "max": 0.02,
+          "range_text": "0.01 - 0.02"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "stakedao": {
+          "apy": 0.8,
+          "tvl": 105931.24,
+          "boost": 2.5,
+          "fees": null
+        },
+        "stakedao_vault_apy": 0.8,
+        "stakedao_tvl": 105931.24,
+        "stakedao_boost": 2.5,
+        "coin_details": [
+          {
+            "name": "GHO",
+            "amount": 615465.28,
+            "price": 0.9983
+          },
+          {
+            "name": "crvUSD",
+            "amount": 207518.03,
+            "price": 0.9995
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x635EF0056A597D13863B73825CcA297236578595"
+      }
+    },
+    {
+      "id": "ethereum_ousd_crvusd",
+      "name": "OUSD/crvUSD",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "OUSD / crvUSD",
+        "coin_ratios": "OUSD: 25.5%, crvUSD: 74.5%",
+        "tvl_usd": "$11.11K",
+        "tvl_raw": 11109.5,
+        "base_apy": 0.07,
+        "crv_rewards": {
+          "min": 0.0,
+          "max": 0.0,
+          "range_text": "0.00 - 0.00"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "stakedao": {
+          "apy": 0.14,
+          "tvl": 9.99,
+          "boost": 2.5,
+          "fees": null
+        },
+        "stakedao_vault_apy": 0.14,
+        "stakedao_tvl": 9.99,
+        "stakedao_boost": 2.5,
+        "coin_details": [
+          {
+            "name": "OUSD",
+            "amount": 2828.96,
+            "price": 0.9999
+          },
+          {
+            "name": "crvUSD",
+            "amount": 8284.79,
+            "price": 0.9995
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0xEfa939F4932cfF8A92fd6A7C5Fe52cD2AD77f3EC"
+      }
+    },
+    {
+      "id": "ethereum_ousd_eusd",
+      "name": "OUSD/eUSD",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "OUSD / eUSD",
+        "coin_ratios": "OUSD: 41.2%, eUSD: 58.8%",
+        "tvl_usd": "$1.26K",
+        "tvl_raw": 1264.19,
+        "base_apy": 0.78,
+        "crv_rewards": {
+          "min": 42.1,
+          "max": 105.24,
+          "range_text": "42.10 - 105.24"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "stakedao": {
+          "apy": 48.9,
+          "tvl": 1262.99,
+          "boost": 1.36,
+          "fees": null
+        },
+        "stakedao_vault_apy": 48.9,
+        "stakedao_tvl": 1262.99,
+        "stakedao_boost": 1.36,
+        "coin_details": [
+          {
+            "name": "OUSD",
+            "amount": 521.48,
+            "price": 0.9999
+          },
+          {
+            "name": "eUSD",
+            "amount": 743.25,
+            "price": 0.9994
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0xCF8A5C32953D08C197f0A92676CFb59314b5c62e"
+      }
+    },
+    {
+      "id": "ethereum_usd3_susds",
+      "name": "USD3/sUSDS",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "USD3 / sUSDS",
+        "coin_ratios": "USD3: 54.6%, sUSDS: 45.4%",
+        "tvl_usd": "$126.67K",
+        "tvl_raw": 126665.47,
+        "base_apy": 1.62,
+        "crv_rewards": {
+          "min": 0.0,
+          "max": 0.0,
+          "range_text": "0.00 - 0.00"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "stakedao": {
+          "apy": 2.52,
+          "tvl": 103075.86,
+          "boost": 2.5,
+          "fees": null
+        },
+        "stakedao_vault_apy": 2.52,
+        "stakedao_tvl": 103075.86,
+        "stakedao_boost": 2.5,
+        "coin_details": [
+          {
+            "name": "USD3",
+            "amount": 63193.93,
+            "price": 1.0942
+          },
+          {
+            "name": "sUSDS",
+            "amount": 52213.32,
+            "price": 1.1016
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x65b05F6b0472b1f36a2F6d90A14cD21900851609"
+      }
+    },
+    {
+      "id": "ethereum_usd3_susde",
+      "name": "USD3/sUSDe",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "USD3 / sUSDe",
+        "coin_ratios": "USD3: 41.4%, sUSDe: 58.6%",
+        "tvl_usd": "$69.71K",
+        "tvl_raw": 69705.64,
+        "base_apy": 2.22,
+        "crv_rewards": {
+          "min": 0.0,
+          "max": 0.0,
+          "range_text": "0.00 - 0.00"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "stakedao": {
+          "apy": 2.48,
+          "tvl": 40946.84,
+          "boost": 2.5,
+          "fees": null
+        },
+        "stakedao_vault_apy": 2.48,
+        "stakedao_tvl": 40946.84,
+        "stakedao_boost": 2.5,
+        "coin_details": [
+          {
+            "name": "USD3",
+            "amount": 26378.93,
+            "price": 1.0939
+          },
+          {
+            "name": "sUSDe",
+            "amount": 33063.95,
+            "price": 1.2354
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x964573B560DA1cE5b10dd09a4723c5ccBE9f9688"
+      }
+    },
+    {
+      "id": "ethereum_usd3_scrvusd",
+      "name": "USD3/scrvUSD",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "USD3 / scrvUSD",
+        "coin_ratios": "USD3: 47.5%, scrvUSD: 52.5%",
+        "tvl_usd": "$155.31K",
+        "tvl_raw": 155310.16,
+        "base_apy": 1.44,
+        "crv_rewards": {
+          "min": 0.0,
+          "max": 0.0,
+          "range_text": "0.00 - 0.00"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "stakedao": {
+          "apy": 1.23,
+          "tvl": 106013.08,
+          "boost": 2.5,
+          "fees": null
+        },
+        "stakedao_vault_apy": 1.23,
+        "stakedao_tvl": 106013.08,
+        "stakedao_boost": 2.5,
+        "convex": {
+          "apy": 1.44,
+          "tvl": 49219.11,
+          "pool_id": 412
+        },
+        "convex_apy": 1.44,
+        "convex_tvl": 49219.11,
+        "coin_details": [
+          {
+            "name": "USD3",
+            "amount": 67347.81,
+            "price": 1.0944
+          },
+          {
+            "name": "scrvUSD",
+            "amount": 74006.5,
+            "price": 1.1027
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0xE99810Cd5AdCD7b13455aE1BE678B382d61f2d1E"
+      }
+    },
+    {
+      "id": "ethereum_usdc_usdf",
+      "name": "USDC/USDf",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "USDC / USDf",
+        "coin_ratios": "USDC: 17.4%, USDf: 82.6%",
+        "tvl_usd": "$3.38M",
+        "tvl_raw": 3382028.0,
+        "base_apy": 0.51,
+        "crv_rewards": {
+          "min": 2.59,
+          "max": 6.49,
+          "range_text": "2.59 - 6.49"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "stakedao": {
+          "apy": 5.54,
+          "tvl": 79911.38,
+          "boost": 2.5,
+          "fees": null
+        },
+        "stakedao_vault_apy": 5.54,
+        "stakedao_tvl": 79911.38,
+        "stakedao_boost": 2.5,
+        "beefy": {
+          "apy": 5.94,
+          "tvl": 1245451.42,
+          "vault_id": "curve-usdc-usdf"
+        },
+        "beefy_apy": 5.94,
+        "beefy_tvl": 1245451.42,
+        "coin_details": [
+          {
+            "name": "USDC",
+            "amount": 587597.14,
+            "price": 1.0
+          },
+          {
+            "name": "USDf",
+            "amount": 2805560.3,
+            "price": 0.996
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x72310DAAed61321b02B08A547150c07522c6a976"
+      }
+    },
+    {
+      "id": "ethereum_usdaf_curve_stable_pool",
+      "name": "USDaf Curve Stable Pool",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "scrvUSD / USDaf",
+        "coin_ratios": "scrvUSD: 20.2%, USDaf: 79.8%",
+        "tvl_usd": "$55.57K",
+        "tvl_raw": 55569.52,
+        "base_apy": 0.59,
+        "crv_rewards": {
+          "min": 0.0,
+          "max": 0.01,
+          "range_text": "0.00 - 0.01"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "stakedao": {
+          "apy": 0.6,
+          "tvl": null,
+          "boost": 2.5,
+          "fees": null
+        },
+        "stakedao_vault_apy": 0.6,
+        "stakedao_tvl": null,
+        "stakedao_boost": 2.5,
+        "beefy": {
+          "apy": 0.62,
+          "tvl": 37089.52,
+          "vault_id": "curve-scrvusd-usdaf"
+        },
+        "beefy_apy": 0.62,
+        "beefy_tvl": 37089.52,
+        "coin_details": [
+          {
+            "name": "scrvUSD",
+            "amount": 10179.95,
+            "price": 1.1027
+          },
+          {
+            "name": "USDaf",
+            "amount": 45019.4,
+            "price": 0.985
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x3bE454C4391690ab4DDae3Fb987c8147b8Ecc08A"
+      }
+    },
+    {
+      "id": "ethereum_eusd_usdc",
+      "name": "eUSD/USDC",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "eUSD / USDC",
+        "coin_ratios": "eUSD: 58.1%, USDC: 41.9%",
+        "tvl_usd": "$2.43M",
+        "tvl_raw": 2432799.65,
+        "base_apy": 0.69,
+        "crv_rewards": {
+          "min": 0.0,
+          "max": 0.0,
+          "range_text": "0.00 - 0.00"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "stakedao": {
+          "apy": 0.48,
+          "tvl": 489889.25,
+          "boost": 2.5,
+          "fees": null
+        },
+        "stakedao_vault_apy": 0.48,
+        "stakedao_tvl": 489889.25,
+        "stakedao_boost": 2.5,
+        "coin_details": [
+          {
+            "name": "eUSD",
+            "amount": 1413900.59,
+            "price": 0.9994
+          },
+          {
+            "name": "USDC",
+            "amount": 1019816.44,
+            "price": 1.0
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x08BfA22bB3e024CDfEB3eca53c0cb93bF59c4147"
+      }
+    },
+    {
+      "id": "ethereum_frxusd_usdf",
+      "name": "frxUSD/USDf",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "frxUSD / USDf",
+        "coin_ratios": "frxUSD: 16.7%, USDf: 83.3%",
+        "tvl_usd": "$5.57K",
+        "tvl_raw": 5573.4,
+        "base_apy": 0.25,
+        "crv_rewards": {
+          "min": 1.17,
+          "max": 2.93,
+          "range_text": "1.17 - 2.93"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "stakedao": {
+          "apy": 2.5,
+          "tvl": 59.44,
+          "boost": 2.5,
+          "fees": null
+        },
+        "stakedao_vault_apy": 2.5,
+        "stakedao_tvl": 59.44,
+        "stakedao_boost": 2.5,
+        "beefy": {
+          "apy": 7.1,
+          "tvl": 2126.02,
+          "vault_id": "curve-frxusd-usdf"
+        },
+        "beefy_apy": 7.1,
+        "beefy_tvl": 2126.02,
+        "coin_details": [
+          {
+            "name": "frxUSD",
+            "amount": 932.68,
+            "price": 1.0001
+          },
+          {
+            "name": "USDf",
+            "amount": 4659.13,
+            "price": 0.996
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x98E9599dab3A936C35DE48E13E026Ef4eA20B5e6"
+      }
+    },
+    {
+      "id": "ethereum_frxusd_scrvusd",
+      "name": "frxUSD/scrvUSD",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "frxUSD / scrvUSD",
+        "coin_ratios": "frxUSD: 29.7%, scrvUSD: 70.3%",
+        "tvl_usd": "$252.59K",
+        "tvl_raw": 252585.19,
+        "base_apy": 2.25,
+        "crv_rewards": {
+          "min": 1.97,
+          "max": 4.92,
+          "range_text": "1.97 - 4.92"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "stakedao": {
+          "apy": 4.97,
+          "tvl": 206117.38,
+          "boost": 2.16,
+          "fees": null
+        },
+        "stakedao_vault_apy": 4.97,
+        "stakedao_tvl": 206117.38,
+        "stakedao_boost": 2.16,
+        "convex": {
+          "apy": 5.36,
+          "tvl": 147279.98,
+          "pool_id": 432
+        },
+        "convex_apy": 5.36,
+        "convex_tvl": 147279.98,
+        "coin_details": [
+          {
+            "name": "frxUSD",
+            "amount": 75113.95,
+            "price": 1.0001
+          },
+          {
+            "name": "scrvUSD",
+            "amount": 160941.53,
+            "price": 1.1027
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x4d968a5Db8dA0822A2F08840f553De4129aAe5F3"
+      }
+    },
+    {
+      "id": "ethereum_pyusd_crvusd",
+      "name": "pyUSD/crvUSD",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "PYUSD / crvUSD",
+        "coin_ratios": "PYUSD: 23.1%, crvUSD: 76.9%",
+        "tvl_usd": "$1.25M",
+        "tvl_raw": 1254980.14,
+        "base_apy": 0.11,
+        "crv_rewards": {
+          "min": 2.27,
+          "max": 5.67,
+          "range_text": "2.27 - 5.67"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "stakedao": {
+          "apy": 4.93,
+          "tvl": 293928.37,
+          "boost": 2.5,
+          "fees": null
+        },
+        "stakedao_vault_apy": 4.93,
+        "stakedao_tvl": 293928.37,
+        "stakedao_boost": 2.5,
+        "coin_details": [
+          {
+            "name": "PYUSD",
+            "amount": 290105.26,
+            "price": 1.0001
+          },
+          {
+            "name": "crvUSD",
+            "amount": 965300.91,
+            "price": 0.9995
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x625E92624Bc2D88619ACCc1788365A69767f6200"
+      }
+    },
+    {
+      "id": "ethereum_reusd_scrvusd",
+      "name": "reUSD/scrvUSD",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "reUSD / scrvUSD",
+        "coin_ratios": "reUSD: 67.2%, scrvUSD: 32.8%",
+        "tvl_usd": "$7.51M",
+        "tvl_raw": 7513806.77,
+        "base_apy": 0.91,
+        "crv_rewards": {
+          "min": 3.17,
+          "max": 7.93,
+          "range_text": "3.17 - 7.93"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "stakedao": {
+          "apy": 6.3,
+          "tvl": 2619444.59,
+          "boost": 2.16,
+          "fees": null
+        },
+        "stakedao_vault_apy": 6.3,
+        "stakedao_tvl": 2619444.59,
+        "stakedao_boost": 2.16,
+        "beefy": {
+          "apy": 6.7,
+          "tvl": 1209483.62,
+          "vault_id": "curve-reusd-scrvusd"
+        },
+        "beefy_apy": 6.7,
+        "beefy_tvl": 1209483.62,
+        "coin_details": [
+          {
+            "name": "reUSD",
+            "amount": 5074683.26,
+            "price": 0.9946
+          },
+          {
+            "name": "scrvUSD",
+            "amount": 2236690.55,
+            "price": 1.1027
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0xc522A6606BBA746d7960404F22a3DB936B6F4F50"
+      }
+    },
+    {
+      "id": "ethereum_reusd_sfrxusd",
+      "name": "reUSD/sfrxUSD",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "reUSD / sfrxUSD",
+        "coin_ratios": "reUSD: 70.0%, sfrxUSD: 30.0%",
+        "tvl_usd": "$3.04M",
+        "tvl_raw": 3043493.9,
+        "base_apy": 1.2,
+        "crv_rewards": {
+          "min": 4.83,
+          "max": 12.08,
+          "range_text": "4.83 - 12.08"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "beefy": {
+          "apy": 10.47,
+          "tvl": 10233.66,
+          "vault_id": "curve-reusd-sfrxusd"
+        },
+        "beefy_apy": 10.47,
+        "beefy_tvl": 10233.66,
+        "coin_details": [
+          {
+            "name": "reUSD",
+            "amount": 2141354.92,
+            "price": 0.9946
+          },
+          {
+            "name": "sfrxUSD",
+            "amount": 761174.15,
+            "price": 1.2003
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0xed785Af60bEd688baa8990cD5c4166221599A441"
+      }
+    },
+    {
+      "id": "ethereum_weeth_weth_ng",
+      "name": "weETH/WETH-ng",
+      "chain": "ethereum",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "WETH / weETH",
+        "coin_ratios": "WETH: 19.7%, weETH: 80.3%",
+        "tvl_usd": "$9.73M",
+        "tvl_raw": 9734424.76,
+        "base_apy": 1.84,
+        "crv_rewards": {
+          "min": 0.53,
+          "max": 1.32,
+          "range_text": "0.53 - 1.32"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "coin_details": [
+          {
+            "name": "WETH",
+            "amount": 1179.36,
+            "price": 1623.7532
+          },
+          {
+            "name": "weETH",
+            "amount": 4363.36,
+            "price": 1792.0653
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0xDB74dfDD3BB46bE8Ce6C33dC9D82777BCFc3dEd5"
+      }
+    },
+    {
+      "id": "fraxtal_frxusd_fxb2027",
+      "name": "frxUSD/FXB2027",
+      "chain": "fraxtal",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "frxUSD / FXB20271231",
+        "coin_ratios": "frxUSD: 31.9%, FXB20271231: 68.1%",
+        "tvl_usd": "$715.49K",
+        "tvl_raw": 715485.75,
+        "base_apy": 3.66,
+        "crv_rewards": {
+          "min": 0.96,
+          "max": 2.39,
+          "range_text": "0.96 - 2.39"
+        },
+        "other_rewards": [
+          {
+            "token": "WFRAX",
+            "apy": 3.4
+          }
+        ],
+        "total_apy": 0,
+        "stakedao": {
+          "apy": 8.03,
+          "tvl": 626844.79,
+          "boost": 1.21,
+          "fees": null
+        },
+        "stakedao_vault_apy": 8.03,
+        "stakedao_tvl": 626844.79,
+        "stakedao_boost": 1.21,
+        "coin_details": [
+          {
+            "name": "frxUSD",
+            "amount": 228054.8,
+            "price": 1.0006
+          },
+          {
+            "name": "FXB20271231",
+            "amount": 572278.21,
+            "price": 0.8515
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x15d1ed4418dA1F268bCAd5BA7c8d06BB3c3081eD"
+      }
+    },
+    {
+      "id": "fraxtal_frxusdfxb20261231",
+      "name": "frxUSDFXB20261231",
+      "chain": "fraxtal",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "frxUSD / FXB_20261231",
+        "coin_ratios": "frxUSD: 40.0%, FXB_20261231: 60.0%",
+        "tvl_usd": "$1.85M",
+        "tvl_raw": 1853758.82,
+        "base_apy": 5.12,
+        "crv_rewards": {
+          "min": 0.0,
+          "max": 0.0,
+          "range_text": "0.00 - 0.00"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "beefy": {
+          "apy": 5.77,
+          "tvl": 1433557.08,
+          "vault_id": "curve-fraxtal-fxb_20261231"
+        },
+        "beefy_apy": 5.77,
+        "beefy_tvl": 1433557.08,
+        "coin_details": [
+          {
+            "name": "frxUSD",
+            "amount": 741202.74,
+            "price": 1.0006
+          },
+          {
+            "name": "FXB_20261231",
+            "amount": 1184814.11,
+            "price": 0.9387
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0xbC3705b2bfD42d38e8FA2c8EFDC3Fdda645C3b2a"
+      }
+    },
+    {
+      "id": "monad_ausd_usdc_usdt0",
+      "name": "AUSD/USDC/USDT0 (3pool)",
+      "chain": "monad",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "AUSD / USDC / USDT0",
+        "coin_ratios": "AUSD: 26.1%, USDC: 25.4%, USDT0: 48.5%",
+        "tvl_usd": "$2.53M",
+        "tvl_raw": 2534164.01,
+        "base_apy": 0,
+        "crv_rewards": {
+          "min": 0.0,
+          "max": 0.0,
+          "range_text": "0.00 - 0.00"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "beefy": {
+          "apy": 7.52,
+          "tvl": 11747.05,
+          "vault_id": "curve-monad-3pool"
+        },
+        "beefy_apy": 7.52,
+        "beefy_tvl": 11747.05,
+        "coin_details": [
+          {
+            "name": "AUSD",
+            "amount": 660356.69,
+            "price": 1.0
+          },
+          {
+            "name": "USDC",
+            "amount": 644550.75,
+            "price": 1.0
+          },
+          {
+            "name": "USDT0",
+            "amount": 1229256.58,
+            "price": 1.0
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x942644106b073e30d72c2c5d7529d5c296ea91ab"
+      }
+    },
+    {
+      "id": "plasma_usdt_usde",
+      "name": "USDT/USDe",
+      "chain": "plasma",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "USDT / USDe",
+        "coin_ratios": "USDT: 36.7%, USDe: 63.3%",
+        "tvl_usd": "$1.28M",
+        "tvl_raw": 1281117.78,
+        "base_apy": 0,
+        "crv_rewards": {
+          "min": 0.0,
+          "max": 0.0,
+          "range_text": "0.00 - 0.00"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "coin_details": [
+          {
+            "name": "USDT",
+            "amount": 469939.79,
+            "price": 1.0
+          },
+          {
+            "name": "USDe",
+            "amount": 811177.99,
+            "price": 1.0
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x2d84d79c852f6842abe0304b70bbaa1506add457"
+      }
+    },
+    {
+      "id": "plasma_usdt_susde",
+      "name": "USDT/sUSDe",
+      "chain": "plasma",
+      "latest": {
+        "timestamp": "2026-07-01T23:00:55Z",
+        "coins": "USDT / sUSDe",
+        "coin_ratios": "USDT: 40.0%, sUSDe: 60.0%",
+        "tvl_usd": "$1.05M",
+        "tvl_raw": 1047805.42,
+        "base_apy": 0,
+        "crv_rewards": {
+          "min": 0.0,
+          "max": 0.0,
+          "range_text": "0.00 - 0.00"
+        },
+        "other_rewards": null,
+        "total_apy": 0,
+        "coin_details": [
+          {
+            "name": "USDT",
+            "amount": 418920.99,
+            "price": 1.0
+          },
+          {
+            "name": "sUSDe",
+            "amount": 628884.43,
+            "price": 1.0
+          }
+        ]
+      },
+      "metadata": {
+        "pool_address": "0x1e8d78e9b3f0152d54d32904b7933f1cfe439df1"
+      }
+    }
+  ]
+}
