@@ -57,6 +57,10 @@ class PoolData:
     coins: List[str]
     coin_ratios: List[str]
     eth_amounts: List[str]  # ETH amounts for ETH pools
+    # Next-period CRV projection, kept separate from the current rate in
+    # crv_rewards_apy. These diverge whenever gauge weight shifts, and
+    # conflating them overstated every published CRV APR. See _select_crv_apy.
+    crv_rewards_future_apy: Optional[Union[float, List[float]]] = None
     coin_amounts: List[float] = field(default_factory=list)  # Individual coin amounts
     coin_prices: List[float] = field(default_factory=list)   # Individual coin prices
     # StakeDAO fields
@@ -91,6 +95,37 @@ EXIT_DATA_QUALITY = 2
 # treated as a mistake rather than a real shrink. Tuned to allow ordinary
 # churn (removing a pool or two) while catching truncation.
 SHRINK_GUARD_RATIO = 0.5
+
+
+def _normalise_apy_range(raw) -> Optional[List[float]]:
+    """Coerce a Curve APY field into a [min, max] pair, or None if unusable."""
+    if not raw:
+        return None
+    if len(raw) >= 2:
+        return [raw[0], raw[1]]
+    return [raw[0], raw[0]]
+
+
+def select_crv_apy(gauge_data: Dict) -> tuple:
+    """Pick the current CRV APR, and separately the next-period projection.
+
+    Curve exposes gaugeCrvApy (what the gauge pays now) and gaugeFutureCrvApy
+    (what it will pay after the current gauge vote takes effect). This code
+    used to prefer the *future* value on a guess that it "might be more
+    accurate", and published it in a field labelled current CRV rewards.
+
+    The two diverge whenever gauge weight shifts -- on BOLD/USDC as of
+    2026-07-21, 0.12-0.29% current versus 0.45-1.13% future, a 3.9x
+    overstatement. Every consumer ranking pools on CRV APR inherited it.
+
+    Returns (current, future); either may be None when the gauge omits it.
+    Falls back to the future value only when there is no current one, since a
+    projection is better than nothing -- but never silently replaces a
+    current value that exists.
+    """
+    current = _normalise_apy_range(gauge_data.get('gaugeCrvApy'))
+    future = _normalise_apy_range(gauge_data.get('gaugeFutureCrvApy'))
+    return (current if current is not None else future), future
 
 
 def is_suspicious_shrink(existing_rows: int, new_rows: int,
@@ -737,14 +772,14 @@ class CurveTracker:
         crv_apy = 0
         other_rewards = []
 
+        crv_future_apy = None
+
         if gauge_data:
-            # Get CRV APY range from gauge data
-            # Try gaugeFutureCrvApy first (might be more accurate), fallback to gaugeCrvApy
-            gauge_crv_apy = gauge_data.get('gaugeFutureCrvApy', gauge_data.get('gaugeCrvApy', []))
-            if gauge_crv_apy and len(gauge_crv_apy) >= 2:
-                crv_apy = gauge_crv_apy  # Store as range [min, max]
-            elif gauge_crv_apy and len(gauge_crv_apy) == 1:
-                crv_apy = [gauge_crv_apy[0], gauge_crv_apy[0]]  # Same value for min/max
+            # Current rate, with the next-period projection kept separate
+            # rather than substituted for it.
+            crv_apy, crv_future_apy = select_crv_apy(gauge_data)
+            if crv_apy is None:
+                crv_apy = 0
 
             # Check for other reward tokens from Curve gauge data
             side_chain_rewards_apy = gauge_data.get('sideChainRewardsApy', 0)
@@ -908,6 +943,7 @@ class CurveTracker:
             base_apy=base_apy,
             crv_rewards_apy=crv_apy,
             other_rewards=other_rewards,
+            crv_rewards_future_apy=crv_future_apy,
             coins=coins,
             coin_ratios=coin_ratios,
             eth_amounts=eth_amounts,

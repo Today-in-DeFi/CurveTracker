@@ -215,6 +215,12 @@ class CurveDataExporter:
                         "max": round(crv_max, 2),
                         "range_text": f"{crv_min:.2f} - {crv_max:.2f}"
                     },
+                    # Additive: consumers reading crv_rewards keep the current
+                    # rate; those wanting the post-vote projection can opt in
+                    # rather than getting it silently in crv_rewards.
+                    "crv_rewards_future": self._format_future_crv(
+                        getattr(pool, 'crv_rewards_future_apy', None)
+                    ),
                     "other_rewards": self._format_other_rewards(pool.other_rewards)
                 },
                 "metadata": {
@@ -344,6 +350,23 @@ class CurveDataExporter:
         except (ValueError, TypeError):
             # Default to 0 if can't parse
             return 0.0, 0.0
+
+    def _format_future_crv(self, future_apy) -> Optional[Dict]:
+        """Format the next-period CRV projection, or None if the gauge omits it.
+
+        Deliberately a separate key from crv_rewards: these two diverge on
+        gauge-weight changes, and substituting one for the other is the bug
+        this field exists to make visible.
+        """
+        if not future_apy:
+            return None
+
+        crv_min, crv_max = self._parse_crv_rewards(future_apy)
+        return {
+            "min": round(crv_min, 2),
+            "max": round(crv_max, 2),
+            "range_text": f"{crv_min:.2f} - {crv_max:.2f}"
+        }
 
     def _format_other_rewards(self, other_rewards: List[Dict]) -> Optional[List[Dict]]:
         """Format other rewards for JSON export"""
