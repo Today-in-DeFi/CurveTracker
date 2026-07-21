@@ -1556,6 +1556,18 @@ def print_results(pool_data_list: List[PoolData]):
     print(tabulate(rows, headers=headers, tablefmt="grid"))
 
 
+def should_auto_export(full_pool_set_run: bool, credentials_exist: bool,
+                       sheets_available: bool) -> bool:
+    """Decide whether to export to Sheets without an explicit --export-sheets.
+
+    Export replaces a tab's entire contents, so auto-export is only safe when
+    the run covered a full pool config. A targeted --pool/--chain run that
+    auto-exported would silently replace the whole tab with a one-pool subset.
+    Callers pass explicit --export-sheets straight through, bypassing this.
+    """
+    return full_pool_set_run and credentials_exist and sheets_available
+
+
 def main():
     # Set when an upstream API failed or the sanity gate rejected a snapshot;
     # drives the exit code so a degraded run is visible to cron.
@@ -1729,9 +1741,15 @@ def main():
     if enable_convex:
         print("🔷 Convex integration enabled")
     
+    # Whether this run covered a full pool config. Sheet export replaces tab
+    # contents, so a targeted run must never auto-export: it would silently
+    # overwrite the full history with a one-pool subset.
+    full_pool_set_run = False
+
     if args.pools and pools_config is not None:
         # Use loaded JSON file
         results = tracker.track_pools(pools_config)
+        full_pool_set_run = True
     elif args.pool:
         # Single pool
         pool_data = tracker.get_pool_data(args.chain, args.pool)
@@ -1740,6 +1758,7 @@ def main():
         # Default: use pools.json if it exists, otherwise show popular pools
         if pools_config is not None:
             results = tracker.track_pools(pools_config)
+            full_pool_set_run = True
             print("📄 Using default pools.json file")
         else:
             popular_pools = [
@@ -1758,9 +1777,15 @@ def main():
     # Check if we should auto-export (credentials file exists and no explicit --export-sheets flag)
     if not args.export_sheets:
         credentials_file = args.credentials or os.getenv('GOOGLE_CREDENTIALS_FILE') or 'Google Credentials.json'
-        if os.path.exists(credentials_file) and SHEETS_AVAILABLE:
+        credentials_exist = os.path.exists(credentials_file)
+        if should_auto_export(full_pool_set_run, credentials_exist, SHEETS_AVAILABLE):
             auto_export = True
             args.credentials = credentials_file  # Ensure we use the found credentials file
+        elif credentials_exist and SHEETS_AVAILABLE:
+            # Never silently replace a sheet tab with a partial result set.
+            print("\n📊 Skipping Google Sheets auto-export: this run covered a "
+                  "subset of pools, and export replaces the whole tab.")
+            print("   Pass --export-sheets to export anyway.")
     
     if args.export_sheets or auto_export:
         if not SHEETS_AVAILABLE:
