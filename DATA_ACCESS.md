@@ -135,8 +135,10 @@ The JSON file contains:
 | `latest.tvl_usd` | string | Formatted TVL with suffix |
 | `latest.tvl_raw` | float | Raw TVL value in USD |
 | `latest.base_apy` | float | Trading fee APY |
-| `latest.total_apy` | float | Combined APY (base + CRV + other) |
+| `latest.total_apy` | float | **Deprecated — always `0`.** Never populated; do not read it. Use a protocol block (`convex`/`stakedao`/`beefy`) for the rate you actually earn. |
 | `metadata.pool_address` | string | Pool contract address |
+| `metadata.name` | string | Pool name |
+| `metadata.chain` | string | Chain the pool is on |
 
 #### CRV Rewards Object
 
@@ -145,6 +147,13 @@ The JSON file contains:
 | `crv_rewards.min` | float | CRV APY with no veCRV boost |
 | `crv_rewards.max` | float | CRV APY with maximum 2.5x boost |
 | `crv_rewards.range_text` | string | Formatted range string |
+
+> **`crv_rewards.min` is a floor, not a fallback.** It is the rate earned by an
+> LP staking in the raw Curve gauge with zero veCRV. Anyone staking through
+> Convex, StakeDAO or Beefy earns strictly more — often near-double, since the
+> gap scales with boost. If a position is held through one of those protocols,
+> read that protocol's block. Substituting `crv_rewards.min` when a block is
+> absent understates the real rate silently.
 
 #### Other Rewards Array
 
@@ -161,10 +170,22 @@ The JSON file contains:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `stakedao.apy` | float | Projected APY with sdCRV boost |
+| `stakedao.apy` | float | APY with sdCRV boost, **net of the platform fee** |
 | `stakedao.tvl` | float | TVL in StakeDAO strategy |
 | `stakedao.boost` | float | Current boost multiplier |
-| `stakedao.fees` | string | Fee structure description |
+| `stakedao.fees` | float | Platform fee %, derived (currently 16.5 on every pool). `null` where CRV emissions are too small to derive from — not an assertion that the fee is zero. |
+
+> **StakeDAO and Convex APYs are directly comparable.** Both are net of their
+> platform fee — StakeDAO nets 16.5% itself before publishing, and we deduct
+> Convex's 17%. Neither side is systematically favoured, so a spread between
+> the two blocks is real rather than an artefact of fee treatment.
+
+#### Protocol block absence
+
+A missing `convex`/`stakedao`/`beefy` block means that protocol has **no market
+for the pool**, not that nobody enabled collection. All three default on, so a
+protocol is only absent from the export when it is absent in reality, or when
+the flag was set to `false` deliberately in `pools.json`.
 
 #### Beefy Object (optional)
 
@@ -425,6 +446,24 @@ function importCurveData() {
 - **Hourly updates**: New data generated every hour via cron job
 - **Historical data**: 7-day rolling window (optional)
 - **Archive retention**: Daily archives kept for 30 days
+
+### Metadata is refreshed, not frozen
+
+Per-pool `metadata` in `curve_pools_history.json` is rewritten on every run, not
+only when a pool entry is first created. Two consequences for consumers:
+
+- A pool renamed upstream updates in history rather than keeping its original
+  name for the life of the file.
+- A metadata field added on our side reaches **existing** pools, not just newly
+  added ones — so there is no need to check per-pool coverage before relying on
+  a new key.
+
+This was not true before 2026-07-21: the metadata block was create-only, so any
+field added later silently reached zero existing pools with no error raised.
+
+History `metadata` carries both `pool_address` and a legacy `address` alias for
+the same value. `curve_pools_latest.json` uses `pool_address` only. Prefer
+`pool_address` in new code.
 
 ---
 
