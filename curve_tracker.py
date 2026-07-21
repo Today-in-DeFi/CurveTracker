@@ -87,6 +87,29 @@ RETRY_BACKOFF_SECONDS = 2
 # Kept distinct from 1 so monitoring can tell a partial outage from a crash.
 EXIT_DATA_QUALITY = 2
 
+# A replace that drops a tab below this fraction of its previous row count is
+# treated as a mistake rather than a real shrink. Tuned to allow ordinary
+# churn (removing a pool or two) while catching truncation.
+SHRINK_GUARD_RATIO = 0.5
+
+
+def is_suspicious_shrink(existing_rows: int, new_rows: int,
+                         ratio: float = SHRINK_GUARD_RATIO) -> bool:
+    """Would replacing `existing_rows` with `new_rows` lose a suspicious amount?
+
+    Replacing a sheet tab clears it first, so a run that produced a partial
+    result set silently destroys the rest. That has happened via a targeted
+    --pool run, and could equally happen from a truncated pools.json or an
+    upstream outage. This is the backstop that does not depend on knowing
+    which of those caused it.
+
+    Growth and small shrinks pass. An empty or unreadable existing tab passes,
+    since there is nothing to lose.
+    """
+    if existing_rows <= 0 or new_rows >= existing_rows:
+        return False
+    return new_rows < existing_rows * ratio
+
 
 class JSONAPIClient:
     """Shared HTTP behaviour for the upstream JSON APIs.
@@ -931,6 +954,8 @@ class GoogleSheetsExporter:
             raise ImportError("Google Sheets dependencies not available. Install with: pip install gspread gspread-dataframe google-auth")
         
         self.credentials_file = credentials_file or os.getenv('GOOGLE_CREDENTIALS_FILE')
+        # Tabs the shrink guard declined to replace; see export_to_sheets.
+        self.last_refused_replaces: List[tuple] = []
         self.client = None
     
     def _is_eth_pool(self, pool: PoolData) -> bool:
@@ -1100,8 +1125,16 @@ class GoogleSheetsExporter:
     def export_to_sheets(self, pool_data_list: List[PoolData], 
                         spreadsheet_id: Optional[str] = None, 
                         spreadsheet_name: Optional[str] = None,
-                        append_data: bool = True) -> None:
-        """Export pool data to Google Sheets"""
+                        append_data: bool = True,
+                        force_replace: bool = False) -> None:
+        """Export pool data to Google Sheets.
+
+        Tabs whose replace was refused by the shrink guard are recorded in
+        last_refused_replaces so the caller can set a non-zero exit code.
+        """
+        # Reset per run: stale entries would fail every later run.
+        self.last_refused_replaces: List[tuple] = []
+
         if not pool_data_list:
             print("❌ No pool data to export")
             return
@@ -1175,12 +1208,40 @@ class GoogleSheetsExporter:
                     set_with_dataframe(worksheet, df, include_index=False)
                     print(f"📝 Replaced data in {category} with {len(df)} rows")
             else:
-                # Replace all data
+                # Replace all data, unless doing so would destroy most of the
+                # tab -- that is far more likely to be a partial run than a
+                # real shrink, and clear() is not recoverable.
+                try:
+                    existing_rows = max(0, len(worksheet.get_all_values()) - 1)
+                except Exception as e:
+                    # Can't read the tab, so can't judge the shrink. Fail closed.
+                    print(f"⚠️  Could not read existing {category} rows ({e}); "
+                          f"skipping replace to avoid clobbering it.")
+                    self.last_refused_replaces.append((category, -1, len(df)))
+                    continue
+
+                if is_suspicious_shrink(existing_rows, len(df)) and not force_replace:
+                    print(f"\n🛑 Refusing to replace {category}: would drop "
+                          f"{existing_rows} rows to {len(df)}.")
+                    print(f"   If this shrink is real, re-run with --force-replace.")
+                    self.last_refused_replaces.append((category, existing_rows, len(df)))
+                    continue
+
                 worksheet.clear()
                 set_with_dataframe(worksheet, df, include_index=False)
-                print(f"📝 Updated {category} with {len(df)} pools")
-        
-        print(f"✅ Successfully exported {len(pool_data_list)} pools to Google Sheets")
+                print(f"📝 Updated {category} with {len(df)} pools "
+                      f"(was {existing_rows})")
+
+        # Don't report success when a tab was left stale -- a green checkmark
+        # over a refused replace is how this class of bug stays invisible.
+        if self.last_refused_replaces:
+            refused = ", ".join(name for name, _, _ in self.last_refused_replaces)
+            print(f"\n⚠️  Exported {len(pool_data_list)} pools, but left "
+                  f"{len(self.last_refused_replaces)} tab(s) unchanged: {refused}")
+            print("   That data is now stale. Re-run with --force-replace if "
+                  "the shrink was intended.")
+        else:
+            print(f"✅ Successfully exported {len(pool_data_list)} pools to Google Sheets")
 
     def _cleanup_old_log_data(
         self,
@@ -1581,17 +1642,18 @@ def main():
     parser.add_argument('--pools', '-P',
                        help='JSON file with pool list')
 
-    # StakeDAO integration
-    parser.add_argument('--stakedao', action='store_true',
-                       help='Enable StakeDAO data fetching')
+    # Integration flags are tri-state: True (--x), False (--no-x) or None
+    # (unset). --add-pool writes the flag into pools.json only when it is not
+    # None, so --no-x is the only way to record an explicit "false" from the
+    # CLI; store_true could never express it.
+    parser.add_argument('--stakedao', action=argparse.BooleanOptionalAction,
+                       default=None, help='Enable StakeDAO data fetching')
 
-    # Beefy integration
-    parser.add_argument('--beefy', action='store_true',
-                       help='Enable Beefy data fetching')
+    parser.add_argument('--beefy', action=argparse.BooleanOptionalAction,
+                       default=None, help='Enable Beefy data fetching')
 
-    # Convex integration
-    parser.add_argument('--convex', action='store_true',
-                       help='Enable Convex data fetching')
+    parser.add_argument('--convex', action=argparse.BooleanOptionalAction,
+                       default=None, help='Enable Convex data fetching')
 
     # Google Sheets arguments
     parser.add_argument('--export-sheets', action='store_true',
@@ -1606,6 +1668,8 @@ def main():
                        help='Append to existing data instead of replacing (default: replace)')
     parser.add_argument('--replace-data', action='store_true',
                        help='Replace existing data (same as default behavior)')
+    parser.add_argument('--force-replace', action='store_true',
+                       help='Replace a sheet tab even if it would drop most of its rows')
 
     # JSON export arguments
     parser.add_argument('--export-json', action='store_true',
@@ -1647,9 +1711,9 @@ def main():
                     chain=chain,
                     pool=pool,
                     comment=args.comment,
-                    stakedao_enabled=args.stakedao if args.stakedao else None,
-                    beefy_enabled=args.beefy if args.beefy else None,
-                    convex_enabled=args.convex if args.convex else None,
+                    stakedao_enabled=args.stakedao,
+                    beefy_enabled=args.beefy,
+                    convex_enabled=args.convex,
                     validate=not args.no_validate
                 )
                 sys.exit(0)
@@ -1704,11 +1768,13 @@ def main():
             with open(args.pools, 'r') as f:
                 pools_config = json.load(f)
                 if isinstance(pools_config, dict):
-                    if pools_config.get('enable_stakedao'):
+                    # Config can turn an integration on, but must not override
+                    # an explicit --no-x from the command line.
+                    if pools_config.get('enable_stakedao') and enable_stakedao is not False:
                         enable_stakedao = True
-                    if pools_config.get('enable_beefy'):
+                    if pools_config.get('enable_beefy') and enable_beefy is not False:
                         enable_beefy = True
-                    if pools_config.get('enable_convex'):
+                    if pools_config.get('enable_convex') and enable_convex is not False:
                         enable_convex = True
                     pools_config = pools_config.get('pools', [])
         except FileNotFoundError:
@@ -1722,11 +1788,13 @@ def main():
             with open('pools.json', 'r') as f:
                 pools_config = json.load(f)
                 if isinstance(pools_config, dict):
-                    if pools_config.get('enable_stakedao'):
+                    # Config can turn an integration on, but must not override
+                    # an explicit --no-x from the command line.
+                    if pools_config.get('enable_stakedao') and enable_stakedao is not False:
                         enable_stakedao = True
-                    if pools_config.get('enable_beefy'):
+                    if pools_config.get('enable_beefy') and enable_beefy is not False:
                         enable_beefy = True
-                    if pools_config.get('enable_convex'):
+                    if pools_config.get('enable_convex') and enable_convex is not False:
                         enable_convex = True
                     pools_config = pools_config.get('pools', [])
         except (FileNotFoundError, json.JSONDecodeError):
@@ -1813,8 +1881,13 @@ def main():
                     results,
                     spreadsheet_id=args.sheet_id,
                     spreadsheet_name=args.sheet_name,
-                    append_data=append_data
+                    append_data=append_data,
+                    force_replace=args.force_replace
                 )
+
+                # A refused replace leaves that tab stale, which cron must see.
+                if exporter.last_refused_replaces:
+                    data_quality_issues = True
 
                 # Also export to Log sheet for time-series tracking
                 exporter.export_to_log_sheet(
@@ -1856,7 +1929,9 @@ def main():
 
                 # Append to cumulative history
                 exporter.append_to_history(results, degraded_sources=degraded)
-                data_quality_issues = bool(degraded or exporter.last_skipped)
+                # Accumulate: a refused sheet replace earlier in this run is
+                # also a data-quality issue and must not be overwritten here.
+                data_quality_issues = data_quality_issues or bool(degraded or exporter.last_skipped)
 
                 # Export archive if requested
                 if args.archive:
