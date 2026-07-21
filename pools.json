@@ -7,50 +7,57 @@
       "chain": "ethereum",
       "pool": "0xed785Af60bEd688baa8990cD5c4166221599A441",
       "comment": "reUSD/sfrxUSD",
-      "stakedao_enabled": false,
-      "beefy_enabled": true
+      "stakedao_enabled": true,
+      "beefy_enabled": true,
+      "convex_enabled": true
     },
     {
       "chain": "ethereum",
       "pool": "0xc522A6606BBA746d7960404F22a3DB936B6F4F50",
       "comment": "reUSD/scrvUSD",
       "stakedao_enabled": true,
-      "beefy_enabled": true
+      "beefy_enabled": true,
+      "convex_enabled": true
     },
     {
       "chain": "ethereum",
       "pool": "0x65b05F6b0472b1f36a2F6d90A14cD21900851609",
       "comment": "USD3/sUSDS",
       "stakedao_enabled": true,
-      "beefy_enabled": false
+      "beefy_enabled": false,
+      "convex_enabled": true
     },
     {
       "chain": "ethereum",
       "pool": "0x72310DAAed61321b02B08A547150c07522c6a976",
       "comment": "USDC/USDf",
       "stakedao_enabled": true,
-      "beefy_enabled": true
+      "beefy_enabled": true,
+      "convex_enabled": true
     },
     {
       "chain": "ethereum",
       "pool": "0xDB74dfDD3BB46bE8Ce6C33dC9D82777BCFc3dEd5",
       "comment": "weETH/WETH",
-      "stakedao_enabled": false,
-      "beefy_enabled": false
+      "stakedao_enabled": true,
+      "beefy_enabled": false,
+      "convex_enabled": true
     },
     {
       "chain": "ethereum",
       "pool": "0x3bE454C4391690ab4DDae3Fb987c8147b8Ecc08A",
       "comment": "scrvUSD/USDAF",
       "stakedao_enabled": true,
-      "beefy_enabled": true
+      "beefy_enabled": true,
+      "convex_enabled": true
     },
     {
       "chain": "ethereum",
       "pool": "0x98E9599dab3A936C35DE48E13E026Ef4eA20B5e6",
       "comment": "frxUSD/USDf",
       "stakedao_enabled": true,
-      "beefy_enabled": true
+      "beefy_enabled": true,
+      "convex_enabled": true
     },
     {
       "chain": "fraxtal",
@@ -59,7 +66,8 @@
       "gauge_address": "0x7506A3e213C362b9e21895c2Bd930DF454d46573",
       "stakedao_vault": "0xE7B60D6ABBa4E0a801ad29c9b824602aB9a0c439",
       "stakedao_enabled": true,
-      "beefy_enabled": false
+      "beefy_enabled": false,
+      "convex_enabled": false
     },
     {
       "chain": "fraxtal",
@@ -67,14 +75,16 @@
       "comment": "frxUSD/FXB 2026",
       "gauge_address": "0xaa1bdffab337c11c34afb56eee1da95cc3d09a65",
       "stakedao_enabled": false,
-      "beefy_enabled": true
+      "beefy_enabled": true,
+      "convex_enabled": false
     },
     {
       "chain": "fraxtal",
       "pool": "0x63Eb7846642630456707C3efBb50A03c79B89D81",
       "comment": "crvUSD/frxUSD",
-      "stakedao_enabled": false,
-      "beefy_enabled": true
+      "stakedao_enabled": true,
+      "beefy_enabled": true,
+      "convex_enabled": false
     },
     {
       "chain": "monad",
@@ -89,14 +99,16 @@
       "pool": "0x2d84d79c852f6842abe0304b70bbaa1506add457",
       "comment": "USDT/USDe (Lagoon wallet)",
       "stakedao_enabled": false,
-      "beefy_enabled": false
+      "beefy_enabled": false,
+      "convex_enabled": false
     },
     {
       "chain": "plasma",
       "pool": "0x1e8d78e9b3f0152d54d32904b7933f1cfe439df1",
       "comment": "sUSDe/USDT (Lagoon wallet)",
       "stakedao_enabled": false,
-      "beefy_enabled": false
+      "beefy_enabled": false,
+      "convex_enabled": false
     },
     {
       "chain": "ethereum",
@@ -111,6 +123,7 @@
       "pool": "0x635ef0056a597d13863b73825cca297236578595",
       "comment": "GHO/crvUSD",
       "stakedao_enabled": true,
+      "convex_enabled": true,
       "beefy_enabled": false,
       "stakedao_vault": "0x5af2c210042fb964c0c10b221ae445ce9d567c57"
     },
@@ -119,32 +132,38 @@
       "pool": "0x08BfA22bB3e024CDfEB3eca53c0cb93bF59c4147",
       "comment": "eUSD/USDC (StakeDAO vault)",
       "stakedao_enabled": true,
-      "beefy_enabled": false
+      "beefy_enabled": false,
+      "convex_enabled": true
     },
     {
       "chain": "ethereum",
       "pool": "0x625E92624Bc2D88619ACCc1788365A69767f6200",
       "comment": "PYUSD/crvUSD",
       "stakedao_enabled": true,
-      "beefy_enabled": false
+      "beefy_enabled": false,
+      "convex_enabled": true
     },
     {
       "chain": "ethereum",
       "pool": "0xEfa939F4932cfF8A92fd6A7C5Fe52cD2AD77f3EC",
       "comment": "OUSD/crvUSD",
-      "stakedao_enabled": true
+      "stakedao_enabled": true,
+      "convex_enabled": true
     },
     {
       "chain": "ethereum",
       "pool": "0xCF8A5C32953D08C197f0A92676CFb59314b5c62e",
       "comment": "OUSD/eUSD",
-      "stakedao_enabled": true
+      "stakedao_enabled": true,
+      "convex_enabled": true
     },
     {
       "chain": "ethereum",
       "pool": "0x2c683fAd51da2cd17793219CC86439C1875c353e",
       "comment": "ETH+/WETH",
-      "beefy_enabled": true
+      "beefy_enabled": true,
+      "convex_enabled": true,
+      "stakedao_enabled": true
     },
     {
       "chain": "ethereum",
@@ -158,21 +177,24 @@
       "pool": "0x964573b560da1ce5b10dd09a4723c5ccbe9f9688",
       "comment": "USD3/sUSDe",
       "stakedao_enabled": true,
-      "beefy_enabled": false
+      "beefy_enabled": false,
+      "convex_enabled": true
     },
     {
       "chain": "ethereum",
       "pool": "0x59ab5a5b5d617e478a2479b0cad80da7e2831492",
       "comment": "ETH/ETHx (Stader)",
       "stakedao_enabled": true,
-      "beefy_enabled": false
+      "beefy_enabled": false,
+      "convex_enabled": true
     },
     {
       "chain": "ethereum",
       "pool": "0x5b03cccab7ba3010fa5cad23746cbf0794938e96",
       "comment": "USDT/USDe",
       "stakedao_enabled": true,
-      "beefy_enabled": false
+      "beefy_enabled": false,
+      "convex_enabled": true
     }
   ]
 }
