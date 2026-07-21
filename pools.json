@@ -195,6 +195,11 @@
       "stakedao_enabled": true,
       "beefy_enabled": false,
       "convex_enabled": true
+    },
+    {
+      "chain": "ethereum",
+      "pool": "0xefc6516323fbd28e80b85a497b65a86243a54b3e",
+      "comment": "BOLD/USDC - IPOR rETHLPC carry leg (Personal ETH Farming)"
     }
   ]
 }
