@@ -373,13 +373,22 @@ class CurveDataExporter:
         if not other_rewards:
             return None
 
-        return [
-            {
+        formatted = []
+        for reward in other_rewards:
+            entry = {
                 "token": reward["token"],
-                "apy": round(reward["apy"], 2)
+                "apy": round(reward["apy"], 2),
+                # Derived from apy > 0, not from the gauge's period_finish --
+                # an expired stream and a momentarily-zero one look the same
+                # here. Kept rather than dropped so consumers can distinguish
+                # "incentive ended" from "never had one".
+                "active": reward.get("active", True),
             }
-            for reward in other_rewards
-        ]
+            for optional in ("token_address", "gauge_address", "source"):
+                if reward.get(optional):
+                    entry[optional] = reward[optional]
+            formatted.append(entry)
+        return formatted
 
     def _format_tvl(self, tvl: float) -> str:
         """Format TVL with appropriate suffixes"""

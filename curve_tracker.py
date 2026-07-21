@@ -128,6 +128,43 @@ def select_crv_apy(gauge_data: Dict) -> tuple:
     return (current if current is not None else future), future
 
 
+def parse_gauge_rewards(pool: Dict) -> List[Dict]:
+    """Extract extra gauge incentive streams from a Curve getPools entry.
+
+    Curve returns these under `gaugeRewards`, which this tracker previously
+    never read -- extra rewards were sourced from StakeDAO instead, so any
+    incentivised pool without StakeDAO coverage silently reported none.
+
+    Expired streams are kept with `active: False` rather than dropped, so a
+    consumer can tell "incentive ended" from "never had one". Note that
+    `active` is derived from apy > 0, NOT from the gauge's period_finish,
+    which no Curve endpoint exposes -- a stream that has lapsed and one
+    whose rate is momentarily zero are indistinguishable here. Carrying a
+    real period_finish needs an on-chain reward_data() read.
+    """
+    rewards = []
+    for entry in pool.get('gaugeRewards') or []:
+        if not isinstance(entry, dict):
+            continue
+        symbol = entry.get('symbol')
+        if not symbol:
+            continue
+        try:
+            apy = float(entry.get('apy') or 0)
+        except (TypeError, ValueError):
+            continue
+
+        rewards.append({
+            'token': symbol,
+            'apy': apy,
+            'active': apy > 0,
+            'token_address': entry.get('tokenAddress'),
+            'gauge_address': entry.get('gaugeAddress'),
+            'source': 'curve_gauge',
+        })
+    return rewards
+
+
 def is_suspicious_shrink(existing_rows: int, new_rows: int,
                          ratio: float = SHRINK_GUARD_RATIO) -> bool:
     """Would replacing `existing_rows` with `new_rows` lose a suspicious amount?
@@ -770,9 +807,11 @@ class CurveTracker:
         # Get gauge rewards
         gauge_data = self.get_gauge_rewards(chain, pool_address)
         crv_apy = 0
-        other_rewards = []
-
         crv_future_apy = None
+
+        # Curve's own gauge incentives are the primary source. StakeDAO is
+        # only a fallback below, for pools Curve does not report.
+        other_rewards = parse_gauge_rewards(pool)
 
         if gauge_data:
             # Current rate, with the next-period projection kept separate
@@ -781,12 +820,16 @@ class CurveTracker:
             if crv_apy is None:
                 crv_apy = 0
 
-            # Check for other reward tokens from Curve gauge data
+            # Sidechain gauges report an aggregate instead of a per-token
+            # breakdown. Only use it when gaugeRewards gave us nothing, or it
+            # would double-count the same incentives.
             side_chain_rewards_apy = gauge_data.get('sideChainRewardsApy', 0)
-            if side_chain_rewards_apy > 0:
+            if not other_rewards and side_chain_rewards_apy > 0:
                 other_rewards.append({
                     'token': 'Side Chain Rewards',
-                    'apy': side_chain_rewards_apy * 100
+                    'apy': side_chain_rewards_apy * 100,
+                    'active': True,
+                    'source': 'curve_sidechain',
                 })
         
         # Get coin information and calculate ratios
@@ -887,7 +930,9 @@ class CurveTracker:
                                 if token_symbol.upper() != 'CRV' and reward_apr > 0:
                                     other_rewards.append({
                                         'token': token_symbol,
-                                        'apy': reward_apr
+                                        'apy': reward_apr,
+                                        'active': True,
+                                        'source': 'stakedao',
                                     })
 
         # Get Beefy data if enabled
@@ -1098,8 +1143,11 @@ class GoogleSheetsExporter:
             # Format other rewards
             other_rewards_str = ""
             if pool.other_rewards:
-                rewards_list = [f"{r['token']}: {r['apy']:.2f}%" for r in pool.other_rewards]
-                other_rewards_str = ", ".join(rewards_list)
+                rewards_list = [f"{r['token']}: {r['apy']:.2f}%"
+                                for r in pool.other_rewards if r.get('active', True)]
+                # A pool whose only streams have all expired reads "None",
+                # not blank -- blank looks like a formatting glitch.
+                other_rewards_str = ", ".join(rewards_list) if rewards_list else "None"
             else:
                 other_rewards_str = "None"
 
@@ -1448,8 +1496,11 @@ class GoogleSheetsExporter:
             # Format other rewards
             other_rewards_str = ""
             if pool.other_rewards:
-                rewards_list = [f"{r['token']}: {r['apy']:.2f}%" for r in pool.other_rewards]
-                other_rewards_str = ", ".join(rewards_list)
+                rewards_list = [f"{r['token']}: {r['apy']:.2f}%"
+                                for r in pool.other_rewards if r.get('active', True)]
+                # A pool whose only streams have all expired reads "None",
+                # not blank -- blank looks like a formatting glitch.
+                other_rewards_str = ", ".join(rewards_list) if rewards_list else "None"
             else:
                 other_rewards_str = "None"
 
@@ -1575,8 +1626,11 @@ def print_results(pool_data_list: List[PoolData]):
         # Format other rewards
         other_rewards_str = ""
         if pool.other_rewards:
-            rewards_list = [f"{r['token']}: {r['apy']:.2f}%" for r in pool.other_rewards]
-            other_rewards_str = ", ".join(rewards_list)
+            rewards_list = [f"{r['token']}: {r['apy']:.2f}%"
+                            for r in pool.other_rewards if r.get('active', True)]
+            # A pool whose only streams have all expired reads "None", not
+            # blank -- blank looks like a formatting glitch.
+            other_rewards_str = ", ".join(rewards_list) if rewards_list else "None"
         else:
             other_rewards_str = "None"
         
