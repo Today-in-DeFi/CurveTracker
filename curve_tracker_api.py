@@ -153,12 +153,14 @@ class CurveDataAPI:
     def _get_tracker(self) -> CurveTracker:
         """Lazy load the CurveTracker instance"""
         if self._tracker is None:
-            # Check global config for defaults
+            # Default on, matching CurveTracker.track_pools: a config that
+            # omits these should collect everything, so an absent protocol
+            # block means no market rather than a silently disabled fetch.
             config = self._manager.config
             self._tracker = CurveTracker(
-                enable_stakedao=config.get("enable_stakedao", False),
-                enable_beefy=config.get("enable_beefy", False),
-                enable_convex=config.get("enable_convex", False)
+                enable_stakedao=config.get("enable_stakedao", True),
+                enable_beefy=config.get("enable_beefy", True),
+                enable_convex=config.get("enable_convex", True)
             )
         return self._tracker
 
