@@ -6,6 +6,7 @@ Fetches TVL, APY, and rewards data for Curve pools
 
 import requests
 import json
+import time
 from typing import Dict, List, Optional, Union
 from dataclasses import dataclass, field
 from tabulate import tabulate
@@ -75,24 +76,71 @@ class PoolData:
     convex_pool_id: Optional[int] = None
 
 
-class CurveAPI:
-    BASE_URL = "https://api.curve.finance/v1"
+# Network defaults shared by every upstream JSON API. Without a timeout a
+# hung upstream stalls the whole cron run; without retries a single blip
+# silently drops that protocol's data for the run.
+REQUEST_TIMEOUT = 15
+REQUEST_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = 2
+
+# Exit code for "completed, but some data is missing or was rejected".
+# Kept distinct from 1 so monitoring can tell a partial outage from a crash.
+EXIT_DATA_QUALITY = 2
+
+
+class JSONAPIClient:
+    """Shared HTTP behaviour for the upstream JSON APIs.
+
+    Callers still get {} on failure, but the failure is also recorded on
+    `failed_endpoints`. That distinction matters: an empty {} used to be
+    indistinguishable from a genuine zero downstream, so an outage wrote a
+    snapshot of zeros into the append-only history as if it were observed.
+    """
+
+    BASE_URL = ""
+    LABEL = "API"
 
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'CurveTracker/1.0'
         })
+        self.failed_endpoints = []
 
-    def _make_request(self, endpoint: str) -> Dict:
-        """Make API request with error handling"""
-        try:
-            response = self.session.get(f"{self.BASE_URL}/{endpoint}")
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            print(f"API request failed: {e}")
-            return {}
+    def _make_request(self, endpoint: str) -> Union[Dict, List]:
+        """Make API request with retries, returning {} once attempts are exhausted."""
+        # Endpoints are relative to BASE_URL, but absolute URLs are accepted
+        # for the APIs that live on a different host per call.
+        url = endpoint if endpoint.startswith("http") else f"{self.BASE_URL}/{endpoint}"
+        last_error = None
+
+        for attempt in range(REQUEST_ATTEMPTS):
+            try:
+                response = self.session.get(url, timeout=REQUEST_TIMEOUT)
+                response.raise_for_status()
+                # A 200 carrying HTML (gateway error pages) raises ValueError
+                # here rather than escaping as an uncaught exception.
+                return response.json()
+            except (requests.exceptions.RequestException, ValueError) as e:
+                last_error = e
+                if attempt < REQUEST_ATTEMPTS - 1:
+                    delay = RETRY_BACKOFF_SECONDS * (2 ** attempt)
+                    print(f"⚠️  {self.LABEL} request failed ({e}); retrying in {delay}s...")
+                    time.sleep(delay)
+
+        print(f"❌ {self.LABEL} request failed after {REQUEST_ATTEMPTS} attempts: {last_error}")
+        self.failed_endpoints.append(endpoint)
+        return {}
+
+    @property
+    def degraded(self) -> bool:
+        """True if any request failed outright during this run."""
+        return bool(self.failed_endpoints)
+
+
+class CurveAPI(JSONAPIClient):
+    BASE_URL = "https://api.curve.finance/v1"
+    LABEL = "Curve API"
 
     def get_all_pools(self, chain: str) -> Dict:
         """Get all pools for a specific chain"""
@@ -111,24 +159,9 @@ class CurveAPI:
         return self._make_request(f"getVolumes/{chain}")
 
 
-class StakeDAOAPI:
+class StakeDAOAPI(JSONAPIClient):
     BASE_URL = "https://api.stakedao.org"
-
-    def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'CurveTracker/1.0'
-        })
-
-    def _make_request(self, endpoint: str) -> Dict:
-        """Make API request with error handling"""
-        try:
-            response = self.session.get(f"{self.BASE_URL}/{endpoint}")
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            print(f"StakeDAO API request failed: {e}")
-            return {}
+    LABEL = "StakeDAO API"
 
     def get_curve_strategies(self, chain_id: str = "1") -> Dict:
         """Get Curve strategies for a specific chain"""
@@ -160,8 +193,9 @@ class StakeDAOAPI:
         return None
 
 
-class BeefyAPI:
+class BeefyAPI(JSONAPIClient):
     BASE_URL = "https://api.beefy.finance"
+    LABEL = "Beefy API"
 
     # Chain name to chain ID mapping
     CHAIN_ID_MAP = {
@@ -175,22 +209,6 @@ class BeefyAPI:
         'fraxtal': 252,
         'monad': 143,
     }
-
-    def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'CurveTracker/1.0'
-        })
-
-    def _make_request(self, endpoint: str) -> Union[Dict, List]:
-        """Make API request with error handling"""
-        try:
-            response = self.session.get(f"{self.BASE_URL}/{endpoint}")
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            print(f"Beefy API request failed: {e}")
-            return {}
 
     def get_vaults(self) -> List[Dict]:
         """Get all Beefy vaults"""
@@ -244,15 +262,13 @@ class BeefyAPI:
         return None
 
 
-class ConvexAPI:
+class ConvexAPI(JSONAPIClient):
+    LABEL = "Convex API"
     POOLS_URL = "https://curve.convexfinance.com/api/curve/pools"
     APYS_URL = "https://curve.convexfinance.com/api/curve-apys"
 
     def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'CurveTracker/1.0'
-        })
+        super().__init__()
         self._pools_cache = None
         self._apys_cache = None
 
@@ -260,31 +276,17 @@ class ConvexAPI:
         """Fetch all pool data from Convex API"""
         if self._pools_cache is not None:
             return self._pools_cache
-        try:
-            response = self.session.get(self.POOLS_URL, timeout=15)
-            response.raise_for_status()
-            data = response.json()
-            self._pools_cache = data.get('pools', data) if isinstance(data, dict) else data
-            return self._pools_cache
-        except requests.exceptions.RequestException as e:
-            print(f"Convex pools API request failed: {e}")
-            self._pools_cache = []
-            return []
+        data = self._make_request(self.POOLS_URL)
+        self._pools_cache = data.get('pools', data) if isinstance(data, dict) else data
+        return self._pools_cache
 
     def _fetch_apys(self) -> Dict:
         """Fetch APY data from Convex API"""
         if self._apys_cache is not None:
             return self._apys_cache
-        try:
-            response = self.session.get(self.APYS_URL, timeout=15)
-            response.raise_for_status()
-            data = response.json()
-            self._apys_cache = data.get('apys', data) if isinstance(data, dict) else data
-            return self._apys_cache
-        except requests.exceptions.RequestException as e:
-            print(f"Convex APY API request failed: {e}")
-            self._apys_cache = {}
-            return {}
+        data = self._make_request(self.APYS_URL)
+        self._apys_cache = data.get('apys', data) if isinstance(data, dict) else data
+        return self._apys_cache
 
     def find_pool_by_address(self, pool_address: str) -> Optional[Dict]:
         """Find Convex pool data by Curve LP token / pool address"""
@@ -347,7 +349,23 @@ class CurveTracker:
         self._stakedao_cache = {}
         self._beefy_cache = {}
         self._convex_cache = {}
-    
+
+    def degraded_sources(self) -> List[str]:
+        """Names of upstream APIs that failed at least one request this run.
+
+        Consumers use this to avoid persisting a run where a source was down —
+        missing data coalesces to 0 downstream and is otherwise
+        indistinguishable from a real zero.
+        """
+        clients = {
+            "Curve": self.api,
+            "StakeDAO": self.stakedao_api,
+            "Beefy": self.beefy_api,
+            "Convex": self.convex_api,
+        }
+        return [name for name, client in clients.items() if client and client.degraded]
+
+
     def _load_chain_data(self, chain: str):
         """Load all data for a chain into cache"""
         if chain not in self._pools_cache:
@@ -460,6 +478,22 @@ class CurveTracker:
             self._stakedao_cache[chain_id][pool_address] = strategy or {}
 
         return self._stakedao_cache[chain_id][pool_address]
+
+    @staticmethod
+    def _beefy_apy_to_percent(raw_apy) -> Optional[float]:
+        """Convert Beefy's decimal APY to a percentage.
+
+        Beefy always reports a fraction (0.077 = 7.7%), so the conversion is
+        unconditional. This used to only multiply when raw_apy < 1, which
+        reported a 150% vault (raw 1.5) as 1.5% - nothing in the value itself
+        distinguishes the two units, so the guess was unfixable in principle.
+
+        Returns None for non-numeric input: "unknown" is honest, whereas
+        passing the raw value through would put a string in the export.
+        """
+        if isinstance(raw_apy, bool) or not isinstance(raw_apy, (int, float)):
+            return None
+        return raw_apy * 100
 
     @staticmethod
     def _derive_stakedao_fee(stakedao_data: Dict) -> Optional[float]:
@@ -810,14 +844,10 @@ class CurveTracker:
                 # Get vault ID for reference
                 beefy_vault_id = beefy_data.get('id')
 
-                # Get APY data (Beefy returns as decimal, convert to percentage)
+                # Get APY data (Beefy reports a decimal fraction)
                 apy_data = self.beefy_api.get_apy_data()
                 if beefy_vault_id and beefy_vault_id in apy_data:
-                    raw_apy = apy_data[beefy_vault_id]
-                    if isinstance(raw_apy, (int, float)) and raw_apy < 1:
-                        beefy_apy = raw_apy * 100  # Convert decimal to percentage
-                    else:
-                        beefy_apy = raw_apy  # Keep as-is if already percentage
+                    beefy_apy = self._beefy_apy_to_percent(apy_data[beefy_vault_id])
 
                 # Get TVL data (already populated in _tvl from vault finding)
                 beefy_tvl = beefy_data.get('_tvl')
@@ -1527,6 +1557,10 @@ def print_results(pool_data_list: List[PoolData]):
 
 
 def main():
+    # Set when an upstream API failed or the sanity gate rejected a snapshot;
+    # drives the exit code so a degraded run is visible to cron.
+    data_quality_issues = False
+
     parser = argparse.ArgumentParser(description="Track Curve Finance pools")
     parser.add_argument('--chain', '-c', default='ethereum',
                        help='Blockchain (default: ethereum)')
@@ -1788,11 +1822,16 @@ def main():
 
                 exporter = CurveDataExporter(output_dir="data")
 
+                # Surface upstream failures so a degraded run is recorded as
+                # degraded rather than silently persisted as zeros.
+                degraded = tracker.degraded_sources()
+
                 # Export main file
-                filepath = exporter.export_to_json(results)
+                filepath = exporter.export_to_json(results, degraded_sources=degraded)
 
                 # Append to cumulative history
-                exporter.append_to_history(results)
+                exporter.append_to_history(results, degraded_sources=degraded)
+                data_quality_issues = bool(degraded or exporter.last_skipped)
 
                 # Export archive if requested
                 if args.archive:
@@ -1863,6 +1902,13 @@ def main():
                 import traceback
                 traceback.print_exc()
                 sys.exit(1)
+
+    # Exit 2 signals "ran to completion, but some data is missing or was
+    # rejected". Distinct from 1 (hard failure) so a monitor can tell a
+    # partial outage from a crash. Previously both looked like success.
+    if data_quality_issues:
+        print("\n⚠️  Run completed with data quality issues (exit code 2)")
+        sys.exit(EXIT_DATA_QUALITY)
 
 
 if __name__ == "__main__":

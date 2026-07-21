@@ -4,9 +4,68 @@ Generates comprehensive JSON exports of pool data for external consumption
 """
 
 import json
+import math
 import os
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
+
+
+# Plausibility bounds for the headline numbers. A value outside these is far
+# more likely to be an upstream glitch or a parsing bug than a real market
+# move, and the history file is append-only — a bad snapshot is permanent.
+MAX_PLAUSIBLE_TVL = 1e11        # $100B; the largest Curve pool is ~$1B
+MAX_PLAUSIBLE_APY = 10_000.0    # 10,000%
+
+
+def check_pool_sanity(pool, previous_snapshot: Optional[Dict] = None) -> List[str]:
+    """Return a list of reasons this pool's numbers should not be persisted.
+
+    An empty list means the snapshot looks trustworthy. This deliberately
+    rejects rather than clamps: a wrong-but-plausible number written to
+    history is worse than a gap, because nothing downstream can detect it.
+    """
+    problems = []
+
+    def _check_number(label, value, maximum, allow_negative=False):
+        if value is None:
+            return
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            problems.append(f"{label} is not numeric ({value!r})")
+            return
+        if math.isnan(value) or math.isinf(value):
+            problems.append(f"{label} is {value}")
+            return
+        if value < 0 and not allow_negative:
+            problems.append(f"{label} is negative ({value})")
+            return
+        if abs(value) > maximum:
+            problems.append(f"{label} of {value:,.2f} exceeds plausible maximum {maximum:,.0f}")
+
+    # TVL can never be negative. Neither can Curve's base APY, which is
+    # derived from trading fees. Integration APYs can: Beefy and similar
+    # report real losses on strategies that are underwater.
+    _check_number("tvl", pool.tvl, MAX_PLAUSIBLE_TVL)
+    _check_number("base_apy", pool.base_apy, MAX_PLAUSIBLE_APY)
+    _check_number("stakedao_tvl", pool.stakedao_tvl, MAX_PLAUSIBLE_TVL)
+    _check_number("beefy_tvl", pool.beefy_tvl, MAX_PLAUSIBLE_TVL)
+    _check_number("convex_tvl", pool.convex_tvl, MAX_PLAUSIBLE_TVL)
+    _check_number("stakedao_apy", pool.stakedao_apy, MAX_PLAUSIBLE_APY, allow_negative=True)
+    _check_number("beefy_apy", pool.beefy_apy, MAX_PLAUSIBLE_APY, allow_negative=True)
+    _check_number("convex_apy", pool.convex_apy, MAX_PLAUSIBLE_APY, allow_negative=True)
+
+    # The outage signature: upstream returns nothing, every field coalesces
+    # to 0, and a pool that had real TVL an hour ago reads as exactly zero.
+    # A genuine drain to precisely 0.0 is possible but rare enough that
+    # skipping the snapshot and alerting is the safer default.
+    if previous_snapshot and pool.tvl == 0:
+        previous_tvl = previous_snapshot.get("tvl", 0)
+        if previous_tvl > 0:
+            problems.append(
+                f"tvl dropped to exactly 0 from {previous_tvl:,.2f} "
+                "(usually an upstream failure, not a real drain)"
+            )
+
+    return problems
 
 
 class CurveDataExporter:
@@ -21,11 +80,15 @@ class CurveDataExporter:
         """
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
+        # Pools rejected by the sanity gate on the most recent history append,
+        # as (pool_name, [reasons]). Read by the CLI to set its exit code.
+        self.last_skipped = []
 
     def export_to_json(
         self,
         pool_data_list: List,  # List[PoolData]
-        history_data: Optional[Dict[str, List[Dict]]] = None
+        history_data: Optional[Dict[str, List[Dict]]] = None,
+        degraded_sources: Optional[List[str]] = None
     ) -> str:
         """
         Export pool data to JSON file.
@@ -33,6 +96,7 @@ class CurveDataExporter:
         Args:
             pool_data_list: List of PoolData objects
             history_data: Optional 7-day history per pool (keyed by pool_id)
+            degraded_sources: Upstream APIs that failed this run, recorded in metadata
 
         Returns:
             Path to saved JSON file
@@ -46,7 +110,7 @@ class CurveDataExporter:
         # Build data structure
         data = {
             "version": "1.0",
-            "metadata": self._build_metadata(pool_data_list, timestamp),
+            "metadata": self._build_metadata(pool_data_list, timestamp, degraded_sources),
             "pools": self._build_pools_array(pool_data_list, history_data)
         }
 
@@ -63,7 +127,8 @@ class CurveDataExporter:
     def _build_metadata(
         self,
         pool_data_list: List,
-        timestamp: datetime
+        timestamp: datetime,
+        degraded_sources: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         Build metadata section.
@@ -71,6 +136,7 @@ class CurveDataExporter:
         Args:
             pool_data_list: List of pool data
             timestamp: Current timestamp
+            degraded_sources: Upstream APIs that failed this run
 
         Returns:
             Metadata dictionary
@@ -96,7 +162,10 @@ class CurveDataExporter:
             "total_pools": len(pool_data_list),
             "chains": sorted(chains),
             "data_freshness_hours": 1,
-            "integrations": integrations
+            "integrations": integrations,
+            # Empty list means every upstream API responded. A non-empty list
+            # means some values in this file may be missing rather than zero.
+            "degraded_sources": sorted(degraded_sources or [])
         }
 
     def _build_pools_array(
@@ -341,7 +410,8 @@ class CurveDataExporter:
     def append_to_history(
         self,
         pool_data_list: List,
-        max_snapshots_per_pool: Optional[int] = None
+        max_snapshots_per_pool: Optional[int] = None,
+        degraded_sources: Optional[List[str]] = None
     ) -> str:
         """
         Append current pool data to cumulative history file.
@@ -349,6 +419,9 @@ class CurveDataExporter:
         Args:
             pool_data_list: List of PoolData objects
             max_snapshots_per_pool: Optional limit on snapshots per pool (None = unlimited)
+            degraded_sources: Upstream APIs that failed this run. Snapshots are
+                still written, but the failure is recorded so a consumer can
+                tell a degraded run from a clean one.
 
         Returns:
             Path to saved history file
@@ -356,6 +429,12 @@ class CurveDataExporter:
         if not pool_data_list:
             print("⚠️  No pool data to append to history")
             return ""
+
+        if degraded_sources:
+            print(
+                f"⚠️  Degraded run — no data from: {', '.join(degraded_sources)}. "
+                "Snapshots failing the sanity check will be skipped."
+            )
 
         timestamp = datetime.utcnow()
         timestamp_str = timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -382,12 +461,26 @@ class CurveDataExporter:
 
         # Append snapshot for each pool
         pools_updated = 0
+        pools_skipped = []
+        self.last_skipped = pools_skipped
         for pool in pool_data_list:
             pool_id = self._generate_pool_id(pool)
 
             # Create pool entry if doesn't exist
             if pool_id not in history["pools"]:
                 history["pools"][pool_id] = {"metadata": {}, "snapshots": []}
+
+            # Sanity-gate before writing. History is append-only, so a bad
+            # value here can never be corrected in place.
+            existing_snapshots = history["pools"][pool_id]["snapshots"]
+            previous = existing_snapshots[-1] if existing_snapshots else None
+            problems = check_pool_sanity(pool, previous)
+            if problems:
+                pools_skipped.append((pool.name, problems))
+                print(f"🚫 Skipping history snapshot for {pool.name}:")
+                for problem in problems:
+                    print(f"     - {problem}")
+                continue
 
             # Refresh metadata every run, not just on creation, so a pool
             # renamed upstream doesn't stay stale for the life of the file.
@@ -447,6 +540,11 @@ class CurveDataExporter:
 
         total_snapshots = sum(len(p["snapshots"]) for p in history["pools"].values())
         print(f"✅ Updated history: {pools_updated} pools, {total_snapshots} total snapshots")
+        if pools_skipped:
+            print(
+                f"🚫 {len(pools_skipped)} pool(s) failed the sanity check and were "
+                f"not recorded: {', '.join(name for name, _ in pools_skipped)}"
+            )
 
         return history_filepath
 

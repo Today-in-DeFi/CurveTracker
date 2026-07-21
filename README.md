@@ -267,6 +267,17 @@ python3 scripts/check_tracked.py --pool 0xed785Af60bEd688baa8990cD5c4166221599A4
 2. JSON configuration file settings
 3. Default values (lowest priority)
 
+## Running Tests
+
+```bash
+pip install -r requirements-dev.txt
+python3 -m pytest
+```
+
+Tests are offline — they never call an upstream API or touch `data/`. HTTP
+behaviour is exercised with `responses`, and the exporter writes to a pytest
+temp directory. CI runs the suite on every push and pull request.
+
 ## Contributing
 
 Contributions welcome! Please feel free to submit a Pull Request.
