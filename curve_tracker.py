@@ -53,7 +53,6 @@ class PoolData:
     base_apy: float
     crv_rewards_apy: float
     other_rewards: List[Dict[str, Union[str, float]]]
-    total_apy: float
     coins: List[str]
     coin_ratios: List[str]
     eth_amounts: List[str]  # ETH amounts for ETH pools
@@ -856,7 +855,6 @@ class CurveTracker:
             base_apy=base_apy,
             crv_rewards_apy=crv_apy,
             other_rewards=other_rewards,
-            total_apy=0,  # Not used anymore
             coins=coins,
             coin_ratios=coin_ratios,
             eth_amounts=eth_amounts,

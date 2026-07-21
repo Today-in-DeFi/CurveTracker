@@ -74,7 +74,6 @@ The JSON file contains:
         "apy": 1.25
       }
     ],
-    "total_apy": 11.73,
     "stakedao": {
       "apy": 16.75,
       "tvl": 2850000.0,
@@ -135,7 +134,7 @@ The JSON file contains:
 | `latest.tvl_usd` | string | Formatted TVL with suffix |
 | `latest.tvl_raw` | float | Raw TVL value in USD |
 | `latest.base_apy` | float | Trading fee APY |
-| `latest.total_apy` | float | **Deprecated — always `0`.** Never populated; do not read it. Use a protocol block (`convex`/`stakedao`/`beefy`) for the rate you actually earn. |
+| ~~`latest.total_apy`~~ | — | **Removed 2026-07-21.** Was hardcoded to `0` on every pool despite being documented as a combined APY. Use the protocol block (`convex`/`stakedao`/`beefy`) for the rate you actually earn. Snapshots written before that date still carry it, always as `0`. |
 | `metadata.pool_address` | string | Pool contract address |
 | `metadata.name` | string | Pool name |
 | `metadata.chain` | string | Chain the pool is on |
@@ -390,7 +389,7 @@ function importCurveData() {
   // Headers
   sheet.appendRow([
     'Pool Name', 'Chain', 'TVL', 'Base APY',
-    'CRV Min', 'CRV Max', 'Total APY', 'StakeDAO APY', 'Beefy APY'
+    'CRV Min', 'CRV Max', 'Convex APY', 'StakeDAO APY', 'Beefy APY'
   ]);
 
   // Data
@@ -402,7 +401,7 @@ function importCurveData() {
       pool.latest.base_apy,
       pool.latest.crv_rewards.min,
       pool.latest.crv_rewards.max,
-      pool.latest.total_apy,
+      pool.latest.convex ? pool.latest.convex.apy : 'N/A',
       pool.latest.stakedao ? pool.latest.stakedao.apy : 'N/A',
       pool.latest.beefy ? pool.latest.beefy.apy : 'N/A'
     ]);
@@ -421,9 +420,13 @@ function importCurveData() {
    - **Min**: Rewards with no veCRV boost (1x)
    - **Max**: Rewards with maximum veCRV boost (2.5x)
 3. **Other Rewards**: Additional token incentives (LDO, ARB, etc.)
-4. **Total APY**: Base + CRV (average) + Other rewards
-5. **StakeDAO APY**: Liquid CRV locking via sdCRV (no lock-up)
-6. **Beefy APY**: Auto-compounding vault strategy
+4. **StakeDAO APY**: Liquid CRV locking via sdCRV (no lock-up), net of a 16.5% fee
+5. **Convex APY**: Boosted CRV + CVX rewards, net of a 17% fee
+6. **Beefy APY**: Auto-compounding vault strategy, net of Beefy's fees
+
+There is deliberately **no combined "total" APY**. A pool pays a different rate
+depending on which protocol you stake through, so a single number could only be
+right for one of them. Read the block matching where the position is held.
 
 ### Yield Optimization Strategies
 

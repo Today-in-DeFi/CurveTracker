@@ -146,8 +146,7 @@ class CurveDataExporter:
                         "max": round(crv_max, 2),
                         "range_text": f"{crv_min:.2f} - {crv_max:.2f}"
                     },
-                    "other_rewards": self._format_other_rewards(pool.other_rewards),
-                    "total_apy": round(pool.total_apy, 2)
+                    "other_rewards": self._format_other_rewards(pool.other_rewards)
                 },
                 "metadata": {
                     "pool_address": pool.address,
@@ -410,8 +409,7 @@ class CurveDataExporter:
                 "tvl": round(pool.tvl, 2),
                 "base_apy": round(pool.base_apy, 2),
                 "crv_rewards_min": round(crv_min, 2),
-                "crv_rewards_max": round(crv_max, 2),
-                "total_apy": round(pool.total_apy, 2)
+                "crv_rewards_max": round(crv_max, 2)
             }
 
             # Add optional integration data

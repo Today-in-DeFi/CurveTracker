@@ -16,7 +16,9 @@ Usage:
     pools = api.get_pools(chain="ethereum")
     
     for pool in pools:
-        print(f"{pool['name']}: {pool['latest']['total_apy']}% APY")
+        # Read the block for the protocol the position is actually held
+        # through - convex / stakedao / beefy. There is no combined field.
+        print(f"{pool['name']}: {pool['latest']['convex']['apy']}% APY")
 
     # 2. Fetch live data (slower, hits APIs)
     live_data = api.fetch_live_pool_data("ethereum", "0x...")
