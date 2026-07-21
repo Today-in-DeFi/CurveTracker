@@ -850,9 +850,12 @@ class CurveTracker:
         for pool_info in pools:
             chain = pool_info['chain']
             pool_id = pool_info['pool']
-            stakedao_enabled = pool_info.get('stakedao_enabled', False)
-            beefy_enabled = pool_info.get('beefy_enabled', False)
-            convex_enabled = pool_info.get('convex_enabled', False)
+            # Default on: absent data then means the protocol has no market for
+            # this pool, not that nobody enabled it. Set the flag to False only
+            # to deliberately suppress a protocol we know exists.
+            stakedao_enabled = pool_info.get('stakedao_enabled', True)
+            beefy_enabled = pool_info.get('beefy_enabled', True)
+            convex_enabled = pool_info.get('convex_enabled', True)
 
             pool_data = self.get_pool_data(chain, pool_id, stakedao_enabled, beefy_enabled, convex_enabled)
             if pool_data:

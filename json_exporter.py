@@ -150,7 +150,9 @@ class CurveDataExporter:
                     "total_apy": round(pool.total_apy, 2)
                 },
                 "metadata": {
-                    "pool_address": pool.address
+                    "pool_address": pool.address,
+                    "name": pool.name,
+                    "chain": pool.chain
                 }
             }
 
