@@ -26,7 +26,7 @@ def check_pool_sanity(pool, previous_snapshot: Optional[Dict] = None) -> List[st
     """
     problems = []
 
-    def _check_number(label, value, maximum):
+    def _check_number(label, value, maximum, allow_negative=False):
         if value is None:
             return
         if not isinstance(value, (int, float)) or isinstance(value, bool):
@@ -35,20 +35,23 @@ def check_pool_sanity(pool, previous_snapshot: Optional[Dict] = None) -> List[st
         if math.isnan(value) or math.isinf(value):
             problems.append(f"{label} is {value}")
             return
-        if value < 0:
+        if value < 0 and not allow_negative:
             problems.append(f"{label} is negative ({value})")
             return
-        if value > maximum:
+        if abs(value) > maximum:
             problems.append(f"{label} of {value:,.2f} exceeds plausible maximum {maximum:,.0f}")
 
+    # TVL can never be negative. Neither can Curve's base APY, which is
+    # derived from trading fees. Integration APYs can: Beefy and similar
+    # report real losses on strategies that are underwater.
     _check_number("tvl", pool.tvl, MAX_PLAUSIBLE_TVL)
     _check_number("base_apy", pool.base_apy, MAX_PLAUSIBLE_APY)
-    _check_number("stakedao_apy", pool.stakedao_apy, MAX_PLAUSIBLE_APY)
     _check_number("stakedao_tvl", pool.stakedao_tvl, MAX_PLAUSIBLE_TVL)
-    _check_number("beefy_apy", pool.beefy_apy, MAX_PLAUSIBLE_APY)
     _check_number("beefy_tvl", pool.beefy_tvl, MAX_PLAUSIBLE_TVL)
-    _check_number("convex_apy", pool.convex_apy, MAX_PLAUSIBLE_APY)
     _check_number("convex_tvl", pool.convex_tvl, MAX_PLAUSIBLE_TVL)
+    _check_number("stakedao_apy", pool.stakedao_apy, MAX_PLAUSIBLE_APY, allow_negative=True)
+    _check_number("beefy_apy", pool.beefy_apy, MAX_PLAUSIBLE_APY, allow_negative=True)
+    _check_number("convex_apy", pool.convex_apy, MAX_PLAUSIBLE_APY, allow_negative=True)
 
     # The outage signature: upstream returns nothing, every field coalesces
     # to 0, and a pool that had real TVL an hour ago reads as exactly zero.
@@ -77,6 +80,9 @@ class CurveDataExporter:
         """
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
+        # Pools rejected by the sanity gate on the most recent history append,
+        # as (pool_name, [reasons]). Read by the CLI to set its exit code.
+        self.last_skipped = []
 
     def export_to_json(
         self,
@@ -456,6 +462,7 @@ class CurveDataExporter:
         # Append snapshot for each pool
         pools_updated = 0
         pools_skipped = []
+        self.last_skipped = pools_skipped
         for pool in pool_data_list:
             pool_id = self._generate_pool_id(pool)
 

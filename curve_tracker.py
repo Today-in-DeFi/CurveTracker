@@ -83,6 +83,10 @@ REQUEST_TIMEOUT = 15
 REQUEST_ATTEMPTS = 3
 RETRY_BACKOFF_SECONDS = 2
 
+# Exit code for "completed, but some data is missing or was rejected".
+# Kept distinct from 1 so monitoring can tell a partial outage from a crash.
+EXIT_DATA_QUALITY = 2
+
 
 class JSONAPIClient:
     """Shared HTTP behaviour for the upstream JSON APIs.
@@ -476,6 +480,22 @@ class CurveTracker:
         return self._stakedao_cache[chain_id][pool_address]
 
     @staticmethod
+    def _beefy_apy_to_percent(raw_apy) -> Optional[float]:
+        """Convert Beefy's decimal APY to a percentage.
+
+        Beefy always reports a fraction (0.077 = 7.7%), so the conversion is
+        unconditional. This used to only multiply when raw_apy < 1, which
+        reported a 150% vault (raw 1.5) as 1.5% - nothing in the value itself
+        distinguishes the two units, so the guess was unfixable in principle.
+
+        Returns None for non-numeric input: "unknown" is honest, whereas
+        passing the raw value through would put a string in the export.
+        """
+        if isinstance(raw_apy, bool) or not isinstance(raw_apy, (int, float)):
+            return None
+        return raw_apy * 100
+
+    @staticmethod
     def _derive_stakedao_fee(stakedao_data: Dict) -> Optional[float]:
         """Derive StakeDAO's platform fee (%) from the gap between the gross
         Curve gauge range and the net CRV APR StakeDAO reports.
@@ -824,14 +844,10 @@ class CurveTracker:
                 # Get vault ID for reference
                 beefy_vault_id = beefy_data.get('id')
 
-                # Get APY data (Beefy returns as decimal, convert to percentage)
+                # Get APY data (Beefy reports a decimal fraction)
                 apy_data = self.beefy_api.get_apy_data()
                 if beefy_vault_id and beefy_vault_id in apy_data:
-                    raw_apy = apy_data[beefy_vault_id]
-                    if isinstance(raw_apy, (int, float)) and raw_apy < 1:
-                        beefy_apy = raw_apy * 100  # Convert decimal to percentage
-                    else:
-                        beefy_apy = raw_apy  # Keep as-is if already percentage
+                    beefy_apy = self._beefy_apy_to_percent(apy_data[beefy_vault_id])
 
                 # Get TVL data (already populated in _tvl from vault finding)
                 beefy_tvl = beefy_data.get('_tvl')
@@ -1541,6 +1557,10 @@ def print_results(pool_data_list: List[PoolData]):
 
 
 def main():
+    # Set when an upstream API failed or the sanity gate rejected a snapshot;
+    # drives the exit code so a degraded run is visible to cron.
+    data_quality_issues = False
+
     parser = argparse.ArgumentParser(description="Track Curve Finance pools")
     parser.add_argument('--chain', '-c', default='ethereum',
                        help='Blockchain (default: ethereum)')
@@ -1811,6 +1831,7 @@ def main():
 
                 # Append to cumulative history
                 exporter.append_to_history(results, degraded_sources=degraded)
+                data_quality_issues = bool(degraded or exporter.last_skipped)
 
                 # Export archive if requested
                 if args.archive:
@@ -1881,6 +1902,13 @@ def main():
                 import traceback
                 traceback.print_exc()
                 sys.exit(1)
+
+    # Exit 2 signals "ran to completion, but some data is missing or was
+    # rejected". Distinct from 1 (hard failure) so a monitor can tell a
+    # partial outage from a crash. Previously both looked like success.
+    if data_quality_issues:
+        print("\n⚠️  Run completed with data quality issues (exit code 2)")
+        sys.exit(EXIT_DATA_QUALITY)
 
 
 if __name__ == "__main__":

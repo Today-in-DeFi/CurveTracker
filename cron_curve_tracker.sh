@@ -56,13 +56,15 @@ python3 -m pip install -r requirements.txt >> "$LOG_FILE" 2>&1
 # Run the curve tracker
 log_message "Executing curve tracker..."
 python3 curve_tracker.py >> "$LOG_FILE" 2>&1
+EXIT_CODE=$?
 
-# Check exit status
-if [ $? -eq 0 ]; then
+# Capture $? once: referencing it again inside the if body re-evaluates it
+# against the [ ] test itself, which always logged exit code 0.
+if [ $EXIT_CODE -eq 0 ]; then
     log_message "Curve Tracker completed successfully"
 else
-    log_error "Curve Tracker failed with exit code $?"
-    exit 1
+    log_error "Curve Tracker failed with exit code $EXIT_CODE"
+    exit $EXIT_CODE
 fi
 
 log_message "Cron job completed"

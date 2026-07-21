@@ -325,10 +325,13 @@ class PoolManager:
             pool: Pool address or name
 
         Returns:
-            True if pool exists and is valid
+            True only if the pool was confirmed to exist.
 
         Note:
-            Makes API call to Curve Finance
+            Makes API call to Curve Finance. Fails closed: if the API can't be
+            reached, validation has not passed, so this returns False rather
+            than waving the pool through precisely when it can't be checked.
+            Use --no-validate to add a pool deliberately without validation.
         """
         try:
             # Try Curve API
@@ -355,9 +358,10 @@ class PoolManager:
             return False
 
         except Exception as e:
-            print(f"⚠️  Could not validate pool (API error): {e}")
-            # Return True to allow adding anyway
-            return True
+            print(f"❌ Could not validate pool (API error): {e}")
+            print("   Validation could not run, so the pool was not confirmed to exist.")
+            print("   Re-run when the API is reachable, or pass --no-validate to skip this check.")
+            return False
 
     def set_global_integrations(
         self,

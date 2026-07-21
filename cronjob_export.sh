@@ -55,6 +55,11 @@ EXIT_CODE=$?
 
 if [ $EXIT_CODE -eq 0 ]; then
     log "✅ Export completed successfully"
+elif [ $EXIT_CODE -eq 2 ]; then
+    # Ran to completion, but an upstream API failed or a snapshot was
+    # rejected by the sanity gate. The data written is incomplete, not wrong.
+    log "⚠️  Export completed with DATA QUALITY ISSUES - see log above for skipped pools"
+    log "    Some values may be missing rather than genuinely zero."
 else
     log "❌ Export failed with exit code: $EXIT_CODE"
 fi
