@@ -6,8 +6,39 @@ Generates comprehensive JSON exports of pool data for external consumption
 import json
 import math
 import os
+import tempfile
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
+
+
+class HistoryCorruptedError(RuntimeError):
+    """The history file is unreadable and must not be silently replaced.
+
+    The history is append-only and months deep. Overwriting it with a fresh
+    structure loses everything permanently, so an unreadable file is a hard
+    stop rather than a reason to start over.
+    """
+
+
+def _atomic_write_json(filepath: str, data: Any) -> None:
+    """Write JSON via a temp file and rename, so readers never see a partial file.
+
+    A plain write truncates the target first: if the process dies mid-dump the
+    file is left corrupt. os.replace is atomic within a filesystem, so the
+    target is either the old contents or the new ones, never half of either.
+    """
+    directory = os.path.dirname(filepath) or "."
+    fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=".tmp_", suffix=".json")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f, indent=2, sort_keys=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, filepath)
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
 
 
 # Plausibility bounds for the headline numbers. A value outside these is far
@@ -118,8 +149,7 @@ class CurveDataExporter:
         filename = "curve_pools_latest.json"
         filepath = os.path.join(self.output_dir, filename)
 
-        with open(filepath, "w") as f:
-            json.dump(data, f, indent=2, sort_keys=False)
+        _atomic_write_json(filepath, data)
 
         print(f"✅ Exported {len(pool_data_list)} pools to {filename}")
         return filepath
@@ -437,8 +467,7 @@ class CurveDataExporter:
         filename = f"curve_pools_{date_str}.json"
         filepath = os.path.join(self.output_dir, filename)
 
-        with open(filepath, "w") as f:
-            json.dump(data, f, indent=2, sort_keys=False)
+        _atomic_write_json(filepath, data)
 
         print(f"✅ Exported daily archive to {filename}")
         return filepath
@@ -485,9 +514,24 @@ class CurveDataExporter:
                 with open(history_filepath, "r") as f:
                     history = json.load(f)
                 print(f"📖 Loaded existing history with {len(history.get('pools', {}))} pools")
-            except json.JSONDecodeError:
-                print("⚠️  History file corrupted, creating new one")
-                history = self._create_empty_history()
+            except json.JSONDecodeError as e:
+                # Do NOT fall through to an empty history: execution continues
+                # to the write below, which would overwrite months of
+                # append-only history with a fresh structure and then report
+                # success. A truncated file is recoverable; an overwritten one
+                # is not. Preserve it and refuse to write.
+                quarantine = f"{history_filepath}.corrupt_{timestamp_str.replace(':', '')}"
+                try:
+                    os.rename(history_filepath, quarantine)
+                    preserved = f"preserved at {quarantine}"
+                except OSError as move_error:
+                    preserved = f"could not be preserved: {move_error}"
+
+                raise HistoryCorruptedError(
+                    f"{history_filepath} is not valid JSON ({e}). The existing "
+                    f"history was {preserved}. Refusing to replace it with an "
+                    f"empty history -- restore it or move it aside to start "
+                    f"fresh deliberately.")
         else:
             print("📝 Creating new history file")
             history = self._create_empty_history()
@@ -570,9 +614,10 @@ class CurveDataExporter:
 
             pools_updated += 1
 
-        # Save updated history
-        with open(history_filepath, "w") as f:
-            json.dump(history, f, indent=2, sort_keys=False)
+        # Save updated history atomically. A direct write leaves a truncated
+        # file if the process dies mid-dump (OOM, reboot, disk full), which is
+        # exactly the corruption the loader above now refuses to overwrite.
+        _atomic_write_json(history_filepath, history)
 
         total_snapshots = sum(len(p["snapshots"]) for p in history["pools"].values())
         print(f"✅ Updated history: {pools_updated} pools, {total_snapshots} total snapshots")

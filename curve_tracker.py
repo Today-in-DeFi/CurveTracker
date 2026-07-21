@@ -1116,6 +1116,10 @@ class GoogleSheetsExporter:
         self.credentials_file = credentials_file or os.getenv('GOOGLE_CREDENTIALS_FILE')
         # Tabs the shrink guard declined to replace; see export_to_sheets.
         self.last_refused_replaces: List[tuple] = []
+        # Failures that were handled and did not raise. Without this they were
+        # printed and forgotten, so a run that wrote nothing to Sheets still
+        # exited 0 -- the reporting tabs simply froze with no alert.
+        self.last_errors: List[str] = []
         self.client = None
     
     def _is_eth_pool(self, pool: PoolData) -> bool:
@@ -1322,6 +1326,7 @@ class GoogleSheetsExporter:
             print(f"📊 Using spreadsheet: {spreadsheet.title}")
         except Exception as e:
             print(f"❌ Error accessing spreadsheet: {e}")
+            self.last_errors.append(f"export_to_sheets: {e}")
             return
         
         # Determine the maximum number of coins across all pools
@@ -1476,7 +1481,10 @@ class GoogleSheetsExporter:
             return rows_deleted
 
         except Exception as e:
+            # The cleanup clears before it writes, so a failure here can
+            # leave the Log sheet emptied. Never downgrade it to a warning.
             print(f"⚠️  Warning: Could not cleanup old log data: {e}")
+            self.last_errors.append(f"log cleanup: {e}")
             return 0
 
     def export_to_log_sheet(
@@ -1519,6 +1527,7 @@ class GoogleSheetsExporter:
             print(f"📊 Logging to spreadsheet: {spreadsheet.title}")
         except Exception as e:
             print(f"❌ Error accessing spreadsheet for log: {e}")
+            self.last_errors.append(f"export_to_log_sheet: {e}")
             return
 
         # Sort pools consistently (by chain, then name)
@@ -1615,6 +1624,7 @@ class GoogleSheetsExporter:
                 print(f"✅ Logged {len(rows_to_append)} pool snapshots at {date_str} {time_str}")
         except Exception as e:
             print(f"❌ Error appending to Log sheet: {e}")
+            self.last_errors.append(f"log append: {e}")
 
 
 def format_currency(amount: float) -> str:
@@ -2012,7 +2022,26 @@ def main():
             print("📄 Using default popular pools (pools.json not found)")
     
     print_results(results)
-    
+
+    # A run that produced nothing is the worst case, and it used to be the one
+    # case that reported clean success: `degraded` was only computed inside the
+    # JSON-export branch, which an empty result set never reaches, so a total
+    # Curve outage fell off the end of main() at exit 0 and cron logged
+    # "Export completed successfully".
+    if not results:
+        print("\n❌ No pool data was collected -- every pool lookup failed.")
+        data_quality_issues = True
+    elif full_pool_set_run and len(results) < len(pools_config or []):
+        # Partial coverage: pools that dropped out are silently absent from
+        # the export, and the shrink guard cannot see a category that
+        # vanished entirely. Only meaningful when the run was supposed to
+        # cover the whole config -- a targeted --pool run legitimately
+        # returns fewer results than pools.json has entries.
+        missing = len(pools_config) - len(results)
+        print(f"\n⚠️  {missing} of {len(pools_config)} configured pools "
+              f"returned no data and are missing from this export.")
+        data_quality_issues = True
+
     # Export to Google Sheets (auto-export if credentials available, or if explicitly requested)
     auto_export = False
     
@@ -2069,16 +2098,29 @@ def main():
                     spreadsheet_id=args.sheet_id,
                     spreadsheet_name=args.sheet_name
                 )
+
+                # Failures the exporter handled without raising still mean
+                # data did not reach the sheet.
+                if exporter.last_errors:
+                    for err in exporter.last_errors:
+                        print(f"⚠️  Sheets export issue: {err}")
+                    data_quality_issues = True
             except Exception as e:
                 print(f"\n❌ Failed to export to Google Sheets: {e}")
                 print("Make sure you have:")
                 print("  1. Valid Google credentials")
                 print("  2. Shared the spreadsheet with your service account email")
                 print("  3. Proper permissions to create/edit spreadsheets")
+                # A failed export leaves the reporting Sheets frozen at their
+                # last good values. cron never passes --export-sheets, so
+                # gating this on it meant a revoked service account produced
+                # a clean exit 0 every hour, indefinitely, with no alert.
+                data_quality_issues = True
                 if args.export_sheets:  # Only exit if explicitly requested
                     sys.exit(1)
                 else:
-                    print("💡 Auto-export failed, but continuing with terminal output...")
+                    print("💡 Auto-export failed; run marked degraded, "
+                          "continuing with terminal output...")
 
     # Export to JSON (and optionally upload to Google Drive)
     # JSON export is enabled by default unless --no-json is specified
@@ -2090,7 +2132,7 @@ def main():
                 print(f"\n📦 Exporting to JSON...")
 
                 # Import exporter
-                from json_exporter import CurveDataExporter
+                from json_exporter import CurveDataExporter, HistoryCorruptedError
 
                 exporter = CurveDataExporter(output_dir="data")
 
@@ -2102,7 +2144,15 @@ def main():
                 filepath = exporter.export_to_json(results, degraded_sources=degraded)
 
                 # Append to cumulative history
-                exporter.append_to_history(results, degraded_sources=degraded)
+                try:
+                    exporter.append_to_history(results, degraded_sources=degraded)
+                except HistoryCorruptedError as e:
+                    # The history was NOT overwritten -- that is the point.
+                    # This run loses its snapshot, which is recoverable; the
+                    # months of history it protects are not.
+                    print(f"\n🛑 History not updated: {e}")
+                    data_quality_issues = True
+
                 # Accumulate: a refused sheet replace earlier in this run is
                 # also a data-quality issue and must not be overwritten here.
                 data_quality_issues = data_quality_issues or bool(degraded or exporter.last_skipped)
