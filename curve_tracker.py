@@ -558,18 +558,33 @@ class CurveTracker:
         return None
     
     def find_pool_by_name(self, chain: str, name: str) -> Optional[Dict]:
-        """Find pool by name or partial name match"""
+        """Find pool by name or partial name match.
+
+        The match is one-directional: the query must be a substring of the
+        pool name (so `steth` finds "Curve.fi ETH/stETH"). The reverse used to
+        also match -- pool name being a substring of the query -- which let a
+        pool literally named "a" match nearly any string, including a 42-char
+        address that had fallen through from a failed address lookup. That
+        silently returned the wrong pool's numbers under the queried name.
+        """
         self._load_chain_data(chain)
-        
+
         pools_data = self._pools_cache.get(chain, {})
         if 'data' not in pools_data or 'poolData' not in pools_data['data']:
             return None
-        
+
         name_lower = name.lower()
+
+        # An address-shaped query is never a pool name. It reaches here only
+        # because the exact-address lookup failed, so fuzzy-matching it against
+        # names can only produce a wrong answer, never a right one.
+        if name_lower.startswith('0x'):
+            return None
+
         for pool in pools_data['data']['poolData']:
             if isinstance(pool, dict):
                 pool_name = pool.get('name', '').lower()
-                if name_lower in pool_name or pool_name in name_lower:
+                if pool_name and name_lower in pool_name:
                     return pool
         return None
     
