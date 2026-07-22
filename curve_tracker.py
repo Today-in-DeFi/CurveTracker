@@ -442,6 +442,8 @@ class CurveTracker:
         self._reward_data_cache = {}
         # Chain RPCs that failed a read this run (Plasma/Monad).
         self._onchain_degraded = set()
+        # Set when a declared PegTracker price could not be resolved.
+        self._pegtracker_degraded = False
         self.stakedao_api = StakeDAOAPI() if enable_stakedao else None
         self.beefy_api = BeefyAPI() if enable_beefy else None
         self.convex_api = ConvexAPI() if enable_convex else None
@@ -508,6 +510,35 @@ class CurveTracker:
 
         return rewards
 
+    def _apply_pegtracker_prices(self, chain: str, pool: Dict) -> bool:
+        """Set each coin's usdPrice from PegTracker where a peg_key is declared.
+
+        Coins without a peg_key are plain $1 references (USDT, USDC) and keep
+        usdPrice 1.0. Coins with a peg_key (sUSDe, USDe, AUSD, USDT0) are
+        repriced from PegTracker, since the chain read gives amounts only.
+
+        Returns True if every declared price resolved. On any failure it marks
+        the run degraded and returns False, so the caller refuses to compute a
+        TVL from a stale $1 -- the silent undercount this exists to fix.
+        """
+        from pegtracker_prices import PriceUnavailable, get_prices
+
+        prices = get_prices()
+        ok = True
+        for coin in pool.get('coins', []):
+            if not isinstance(coin, dict):
+                continue
+            peg_key = coin.get('peg_key')
+            if not peg_key:
+                continue  # plain $1 stablecoin, usdPrice already 1.0
+            try:
+                coin['usdPrice'] = prices.get_price(peg_key)
+            except PriceUnavailable as e:
+                print(f"⚠️  No PegTracker price for {coin.get('symbol', peg_key)}: {e}")
+                self._pegtracker_degraded = True
+                ok = False
+        return ok
+
     def degraded_sources(self) -> List[str]:
         """Names of upstream APIs that failed at least one request this run.
 
@@ -529,6 +560,9 @@ class CurveTracker:
             degraded.append("EthereumRPC")
         # A failed chain read means a pool's TVL is missing a leg, not zero.
         degraded.extend(sorted(self._onchain_degraded))
+        # A missing PegTracker price means a non-$1 token could not be valued.
+        if self._pegtracker_degraded:
+            degraded.append("PegTrackerPrices")
         return degraded
 
 
@@ -729,6 +763,7 @@ class CurveTracker:
                             'decimals': 6,
                             'poolBalance': 0,
                             'usdPrice': 1.0,
+                            'peg_key': 'AUSD_Monad',
                         },
                         {
                             'address': '0x754704bc059f8c67012fed69bc8a327a5aafb603',
@@ -743,6 +778,7 @@ class CurveTracker:
                             'decimals': 6,
                             'poolBalance': 0,
                             'usdPrice': 1.0,
+                            'peg_key': 'USDT0',
                         },
                     ],
                 },
@@ -764,7 +800,8 @@ class CurveTracker:
                             'symbol': 'USDe',
                             'decimals': 18,
                             'poolBalance': 0,
-                            'usdPrice': 1.0
+                            'usdPrice': 1.0,
+                            'peg_key': 'USDe'
                         }
                     ]
                 },
@@ -784,7 +821,8 @@ class CurveTracker:
                             'symbol': 'sUSDe',
                             'decimals': 18,
                             'poolBalance': 0,
-                            'usdPrice': 1.0
+                            'usdPrice': 1.0,
+                            'peg_key': 'sUSDe'
                         }
                     ]
                 }
@@ -852,14 +890,21 @@ class CurveTracker:
         volume_data = self.get_pool_volume_data(chain, pool_address)
         tvl = volume_data.get('usdTotal', 0)
 
+        # Manual-config chains (Plasma/Monad) whose balances come from an
+        # on-chain read and whose non-$1 coins get priced below. When pricing
+        # fails, the naive amount-sum must NOT be used as a fallback -- it is
+        # the very undercount we are removing -- so TVL is left for the sanity
+        # gate to reject.
+        manual_pricing_failed = False
+
         # Fetch on-chain data for Plasma pools
         if chain.lower() == 'plasma' and PLASMA_ONCHAIN_AVAILABLE and 'coins' in pool:
             try:
                 fetcher = get_plasma_fetcher()
                 tokens = [{'symbol': coin['symbol'], 'decimals': coin['decimals']} for coin in pool['coins']]
                 onchain_data = fetcher.get_pool_data(pool_address, tokens)
-                tvl = onchain_data['tvl']
-                # Update coin balances with real on-chain data
+                # Deliberately NOT onchain_data['tvl']: that sums token amounts
+                # as if each were $1. TVL is computed from priced balances below.
                 for i, coin in enumerate(pool['coins']):
                     if i < len(onchain_data['balances']):
                         coin['poolBalance'] = onchain_data['coin_amounts'][i]
@@ -870,6 +915,7 @@ class CurveTracker:
                 # degraded so cron sees a non-zero exit.
                 print(f"Warning: Failed to fetch on-chain data for Plasma pool: {e}")
                 self._onchain_degraded.add("PlasmaRPC")
+                manual_pricing_failed = True
 
         # Fetch on-chain data for Monad pools
         if chain.lower() == 'monad' and MONAD_ONCHAIN_AVAILABLE and 'coins' in pool:
@@ -877,17 +923,26 @@ class CurveTracker:
                 fetcher = get_monad_fetcher()
                 tokens = [{'symbol': coin['symbol'], 'decimals': coin['decimals']} for coin in pool['coins']]
                 onchain_data = fetcher.get_pool_data(pool_address, tokens)
-                tvl = onchain_data['tvl']
+                # See the Plasma branch: naive amount-sum deliberately unused.
                 for i, coin in enumerate(pool['coins']):
                     if i < len(onchain_data['balances']):
                         coin['poolBalance'] = onchain_data['coin_amounts'][i]
             except Exception as e:
-                # See the Plasma branch above -- same reasoning.
                 print(f"Warning: Failed to fetch on-chain data for Monad pool: {e}")
                 self._onchain_degraded.add("MonadRPC")
+                manual_pricing_failed = True
 
-        # If no TVL from volume API, calculate from pool balances
-        if tvl == 0 and 'coins' in pool:
+        # Price non-$1 coins from PegTracker before TVL is computed from
+        # usdPrice below. A declared peg_key that cannot be priced fails the
+        # whole pool loudly rather than leaving a stale $1.
+        if chain.lower() in ('plasma', 'monad') and 'coins' in pool and not manual_pricing_failed:
+            if not self._apply_pegtracker_prices(chain, pool):
+                manual_pricing_failed = True
+
+        # If no TVL from volume API, calculate from priced pool balances. Skip
+        # when manual pricing failed: recomputing here from the stale usdPrice
+        # would resurrect the plausible-but-wrong TVL we are refusing to report.
+        if tvl == 0 and 'coins' in pool and not manual_pricing_failed:
             tvl = 0
             for coin in pool['coins']:
                 if isinstance(coin, dict):
